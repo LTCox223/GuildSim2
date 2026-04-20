@@ -1,0 +1,112 @@
+[
+  {
+    "Id": 0,
+    "NamePattern": "Raider's",
+    "Endurance": 2,
+    "Strength": 4,
+    "Agility": 1,
+    "Intellect": 0,
+    "Spirit": 0,
+    "IsPrefix": "TRUE",
+    "IsSuffix": "FALSE"
+  },
+  {
+    "Id": 1,
+    "NamePattern": "Warrior's",
+    "Endurance": 4,
+    "Strength": 2,
+    "Agility": 1,
+    "Intellect": 0,
+    "Spirit": 0,
+    "IsPrefix": "TRUE",
+    "IsSuffix": "FALSE"
+  },
+  {
+    "Id": 2,
+    "NamePattern": "Bandit's",
+    "Endurance": 1,
+    "Strength": 2,
+    "Agility": 4,
+    "Intellect": 0,
+    "Spirit": 0,
+    "IsPrefix": "TRUE",
+    "IsSuffix": "FALSE"
+  },
+  {
+    "Id": 3,
+    "NamePattern": "Mystic's",
+    "Endurance": 0,
+    "Strength": 0,
+    "Agility": 1,
+    "Intellect": 4,
+    "Spirit": 2,
+    "IsPrefix": "TRUE",
+    "IsSuffix": "FALSE"
+  },
+  {
+    "Id": 4,
+    "NamePattern": "Warden's",
+    "Endurance": 4,
+    "Strength": 3,
+    "Agility": 0,
+    "Intellect": 0,
+    "Spirit": 0,
+    "IsPrefix": "TRUE",
+    "IsSuffix": "FALSE"
+  },
+  {
+    "Id": 5,
+    "NamePattern": "of Vigor",
+    "Endurance": 6,
+    "Strength": 0,
+    "Agility": 0,
+    "Intellect": 0,
+    "Spirit": 0,
+    "IsPrefix": "FALSE",
+    "IsSuffix": "TRUE"
+  },
+  {
+    "Id": 6,
+    "NamePattern": "of Power",
+    "Endurance": 0,
+    "Strength": 6,
+    "Agility": 0,
+    "Intellect": 0,
+    "Spirit": 0,
+    "IsPrefix": "FALSE",
+    "IsSuffix": "TRUE"
+  },
+  {
+    "Id": 7,
+    "NamePattern": "of Quickness",
+    "Endurance": 0,
+    "Strength": 0,
+    "Agility": 6,
+    "Intellect": 0,
+    "Spirit": 0,
+    "IsPrefix": "FALSE",
+    "IsSuffix": "TRUE"
+  },
+  {
+    "Id": 8,
+    "NamePattern": "of Insight",
+    "Endurance": 0,
+    "Strength": 0,
+    "Agility": 0,
+    "Intellect": 6,
+    "Spirit": 0,
+    "IsPrefix": "FALSE",
+    "IsSuffix": "TRUE"
+  },
+  {
+    "Id": 9,
+    "NamePattern": "of the Grove",
+    "Endurance": 2,
+    "Strength": 0,
+    "Agility": 0,
+    "Intellect": 2,
+    "Spirit": 2,
+    "IsPrefix": "FALSE",
+    "IsSuffix": "TRUE"
+  }
+]
