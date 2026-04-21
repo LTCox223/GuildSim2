@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static GameCore.PrimaryStats;
 
 namespace GameCore
 {
@@ -39,29 +40,21 @@ namespace GameCore
             return EquipmentDatabase.GetDefinition(randomDefinition);
         }
 
-        public static void ResolveSingleTargetDamage(Guid? source, Guid? target, int spellId, int rnd)
+        public static SpellCastResult ResolveSpell(SpellCastRequest request)
         {
-            if (!source.HasValue || !target.HasValue)
-            {
-                return; //fail. Can't attack without a source or a target.
-            }
-            int damage = 0;
-            Character sourceCharacter = Characters[source.Value];
-            Character targetCharacter = Characters[target.Value];
-            switch (spellId) //get spell from Id.
-            {
-                case 0: //Auto Attack
-                    EquipmentInstance? weapon = sourceCharacter.EquippedItems.FirstOrDefault(item => item.Definition.Slot == EquipmentSlot.MainHand);
-                    damage = DamageSpells.AutoAttackCalc(weapon, sourceCharacter.BaseStats, rnd);
-                    break;
-                case 1: //Shoot (ranged auto)
-                    break;
-                case 2:
-                    break;
-                default:
-                    return; //fail. Invalid spell.
-            }
-            CurrentHealth[target.Value] -= damage;
+
         }
+    }
+
+    public readonly record struct SortieState
+    {
+        public Guid CharacterId { get; init; }
+        public IReadOnlyDictionary<ResourceType, ResourceState> Resources { get; init; }
+        public IReadOnlyDictionary<int, int> CooldownsBySpellId { get; init; }
+        //public IReadOnlyDictionary<StatusType, int> StatusDurations { get; init; }
+    }
+    public static class SortieStates
+    {
+        public static Dictionary<Guid, SortieState> ByCharacterId { get; private set; } = new Dictionary<Guid, SortieState>();
     }
 }

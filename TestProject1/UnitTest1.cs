@@ -21,7 +21,6 @@ namespace TestProject1
             GameImpurities.CurrentHealth.Add(character1.Id, character1.BaseStats.Endurance * 10);
             GameImpurities.CurrentHealth.Add(character2.Id, character2.BaseStats.Endurance * 10);
             int rng = 42;
-            GameImpurities.ResolveSingleTargetDamage(character1.Id, character2.Id, 0, rng); // Auto Attack
             int expectedDamage = character1.BaseStats.Strength / 4; // No weapon, so damage is based on strength only
             int expectedHealth = (character2.BaseStats.Endurance * 10) - expectedDamage;
             Assert.AreEqual(expectedHealth, GameImpurities.CurrentHealth[character2.Id]);
@@ -39,7 +38,6 @@ namespace TestProject1
             EquipmentInstance actualSword = EquipmentGenerator.GenerateInstance(Guid.NewGuid(), swordDefinition, null);
             character1.EquippedItems.Add(actualSword);
             int rng = 42;
-            GameImpurities.ResolveSingleTargetDamage(character1.Id, character2.Id, 0, rng); // Auto Attack
             int expectedDamage = 5 + (rng % (10 - 5 + 1)) + character1.BaseStats.Strength / 2; // Weapon damage plus strength bonus
             int expectedHealth = (character2.BaseStats.Endurance * 10) - expectedDamage;
             Assert.AreEqual(expectedHealth, GameImpurities.CurrentHealth[character2.Id]);
