@@ -13,23 +13,20 @@ namespace GameCore
             Endurance,
             Strength,
             Agility,
-            Intellect,
-            Spirit
+            Willpower
         }
 
         public int Endurance; //used to calculate HP
         public int Strength;  //used as part of attack power
         public int Agility;   //used for things just not sure what yet.
-        public int Intellect; //used for spell power
-        public int Spirit; //used for magic regeneration
+        public int Willpower; //used for magic regeneration
 
-        public PrimaryStats(int endurance, int strength, int agility, int intellect, int spirit)
+        public PrimaryStats(int endurance, int strength, int agility, int intellect, int willpower)
         {
             Endurance = endurance;
             Strength = strength;
             Agility = agility;
-            Intellect = intellect;
-            Spirit = spirit;
+            Willpower = willpower;
         }
         public static PrimaryStats operator +(PrimaryStats a, PrimaryStats b)
         {
@@ -38,8 +35,7 @@ namespace GameCore
                 Endurance = a.Endurance + b.Endurance,
                 Strength = a.Strength + b.Strength,
                 Agility = a.Agility + b.Agility,
-                Intellect = a.Intellect + b.Intellect,
-                Spirit = a.Spirit + b.Spirit
+                Willpower = a.Willpower + b.Willpower
             };
         }
         public static PrimaryStats operator -(PrimaryStats a, PrimaryStats b)
@@ -49,8 +45,7 @@ namespace GameCore
                 Endurance = a.Endurance - b.Endurance,
                 Strength = a.Strength - b.Strength,
                 Agility = a.Agility - b.Agility,
-                Intellect = a.Intellect - b.Intellect,
-                Spirit = a.Spirit - b.Spirit
+                Willpower = a.Willpower - b.Willpower
             };
         }
 
@@ -61,8 +56,7 @@ namespace GameCore
                 Endurance = a.Endurance + bonus,
                 Strength = a.Strength + bonus,
                 Agility = a.Agility + bonus,
-                Intellect = a.Intellect + bonus,
-                Spirit = a.Spirit + bonus
+                Willpower = a.Willpower + bonus
             };
         }
         public static PrimaryStats operator -(PrimaryStats a, int penalty)
@@ -72,8 +66,7 @@ namespace GameCore
                 Endurance = a.Endurance - penalty,
                 Strength = a.Strength - penalty,
                 Agility = a.Agility - penalty,
-                Intellect = a.Intellect - penalty,
-                Spirit = a.Spirit - penalty
+                Willpower = a.Willpower - penalty
             };
         }
         public static PrimaryStats operator *(PrimaryStats a, double multiplier)
@@ -83,8 +76,7 @@ namespace GameCore
                 Endurance = (int)Math.Round(a.Endurance * multiplier),
                 Strength = (int)Math.Round(a.Strength * multiplier),
                 Agility = (int)Math.Round(a.Agility * multiplier),
-                Intellect = (int)Math.Round(a.Intellect * multiplier),
-                Spirit = (int)Math.Round(a.Spirit * multiplier)
+                Willpower = (int)Math.Round(a.Willpower * multiplier)
             };
         }
         public static PrimaryStats ModifyStat(PrimaryStats primaryStats, StatType statToModify, int value)
@@ -100,11 +92,8 @@ namespace GameCore
                 case StatType.Agility:
                     primaryStats.Agility += value;
                     break;
-                case StatType.Intellect:
-                    primaryStats.Intellect += value;
-                    break;
-                case StatType.Spirit:
-                    primaryStats.Spirit += value;
+                case StatType.Willpower:
+                    primaryStats.Willpower += value;
                     break;
             }
 
@@ -124,11 +113,9 @@ namespace GameCore
                 case StatType.Agility:
                     primaryStats.Agility = (int)Math.Round(primaryStats.Agility * value);
                     break;
-                case StatType.Intellect:
-                    primaryStats.Intellect = (int)Math.Round(primaryStats.Intellect * value);
                     break;
-                case StatType.Spirit:
-                    primaryStats.Spirit = (int)Math.Round(primaryStats.Spirit * value);
+                case StatType.Willpower:
+                    primaryStats.Willpower = (int)Math.Round(primaryStats.Willpower * value);
                     break;
             }
 
@@ -149,11 +136,8 @@ namespace GameCore
                     case StatType.Agility:
                         primaryStats.Agility += value;
                         break;
-                    case StatType.Intellect:
-                        primaryStats.Intellect += value;
-                        break;
-                    case StatType.Spirit:
-                        primaryStats.Spirit += value;
+                    case StatType.Willpower:
+                        primaryStats.Willpower += value;
                         break;
                 }
             }
@@ -174,11 +158,8 @@ namespace GameCore
                     case StatType.Agility:
                         primaryStats.Agility = (int)Math.Round(value * primaryStats.Agility);
                         break;
-                    case StatType.Intellect:
-                        primaryStats.Intellect = (int)Math.Round(value * primaryStats.Intellect);
-                        break;
-                    case StatType.Spirit:
-                        primaryStats.Spirit = (int)Math.Round(value * primaryStats.Spirit);
+                    case StatType.Willpower:
+                        primaryStats.Willpower = (int)Math.Round(value * primaryStats.Willpower);
                         break;
                 }
             }
@@ -200,8 +181,7 @@ namespace GameCore
             if (Endurance > 0) yield return StatType.Endurance;
             if (Strength > 0) yield return StatType.Strength;
             if (Agility > 0) yield return StatType.Agility;
-            if (Intellect > 0) yield return StatType.Intellect;
-            if (Spirit > 0) yield return StatType.Spirit;
+            if (Willpower > 0) yield return StatType.Willpower;
         }
 
         public static PrimaryStats Zero => new PrimaryStats //zeroed out stats for use as a base when modifying stats
@@ -209,8 +189,7 @@ namespace GameCore
             Endurance = 0,
             Strength = 0,
             Agility = 0,
-            Intellect = 0,
-            Spirit = 0
+            Willpower = 0
         };
     }
 }

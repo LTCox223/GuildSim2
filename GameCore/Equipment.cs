@@ -25,21 +25,19 @@ namespace GameCore
 
     public enum ArmorType
     {
-        Cloth,
-        Leather,
-        Mail,
-        Plate,
+        Light, // Cloth. Psyweave in my example.
+        Medium, // Leather. Tactical in my example.
+        Heavy, // Mail. Link Mail in my exmaple.
+        UltraHeavy, // Plate. Powered Frame in my example. 
         Shield
     }
 
     public enum WeaponType
     {
-        Sword,
-        Axe,
-        Mace,
-        Staff,
-        Bow,
-        Dagger
+        BeamSaber, //melee weapon for Galactic Knight (psionic tank)
+        PileDriver, //melee weapon for Star Crusader (tech tank)
+        Sidearm, //ranged weapon for Officer (tech support) and Adept (psionic support)
+        Railgun, //ranged weapon for Psionic Sniper (psionic dps) and Gunhound (tech dps)
     }
     public enum Rarity
     {
@@ -136,8 +134,7 @@ namespace GameCore
                         Strength = dto.Strength,
                         Agility = dto.Agility,
                         Endurance = dto.Endurance,
-                        Intellect = dto.Intellect,
-                        Spirit = dto.Spirit
+                        Willpower = dto.Willpower
                     },
                     RequiredLevel = dto.RequiredLevel
                 };
@@ -168,8 +165,7 @@ namespace GameCore
                         Strength = dto.Strength,
                         Agility = dto.Agility,
                         Endurance = dto.Endurance,
-                        Intellect = dto.Intellect,
-                        Spirit = dto.Spirit
+                        Willpower = dto.Willpower
                     },
                     IsPrefix = dto.IsPrefix,
                     IsSuffix = dto.IsSuffix
@@ -272,7 +268,7 @@ namespace GameCore
         public int Agility { get; init; }
         public int Endurance { get; init; }
         public int Intellect { get; init; }
-        public int Spirit { get; init; }
+        public int Willpower { get; init; }
     }
 
     public sealed record ItemModifierTemplateDto
@@ -283,7 +279,7 @@ namespace GameCore
         public int Agility { get; init; }
         public int Endurance { get; init; }
         public int Intellect { get; init; }
-        public int Spirit { get; init; }
+        public int Willpower { get; init; }
         public bool IsPrefix { get; init; }
         public bool IsSuffix { get; init; }
     }

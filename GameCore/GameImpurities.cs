@@ -54,8 +54,9 @@ namespace GameCore
                     EquipmentInstance? weapon = sourceCharacter.EquippedItems.FirstOrDefault(item => item.Definition.Slot == EquipmentSlot.MainHand);
                     damage = DamageSpells.AutoAttackCalc(weapon, sourceCharacter.BaseStats, rnd);
                     break;
-                case 5: //Holy Smite
-                    damage = DamageSpells.HolySmiteCalc(sourceCharacter.BaseStats, rnd, DamageSpells.HolySmite, 1);
+                case 1: //Shoot (ranged auto)
+                    break;
+                case 2:
                     break;
                 default:
                     return; //fail. Invalid spell.
