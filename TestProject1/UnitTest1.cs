@@ -107,12 +107,11 @@ namespace TestProject1
             GameImpurities.SortieStates.Add(character1.Id, char1State);
             GameImpurities.SortieStates.Add(character2.Id, char2State);
             int rng = 42;
-            GameImpurities.ResolveSpell(new SpellCastRequest() { SourceId = character1.Id, PrimaryTargetId = character2.Id, Spell = meleeAttack, RandomSeed = rng }
+            SpellCastResult result = GameImpurities.ResolveSpell(new SpellCastEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng }, null
             );
-            GameImpurities.UpdateResources();
-            int expectedDamage = character1.BaseStats.Strength / 4; // No weapon, so damage is based on strength only
-            int expectedHealth = (character2.BaseStats.Endurance * 10) - expectedDamage;
-            Assert.AreEqual(expectedHealth, GameImpurities.SortieStates[character2.Id].Resources[ResourceType.Health].Current);
+            int expectedDamage = character1.BaseStats.Strength / 4*-1; // No weapon, so damage is based on strength only
+
+            Assert.AreEqual(expectedDamage, result.ResourceChanges.ToList()[0].Amount);
         }
         [Test]
         public void AutoAttack_Sword_Test()
@@ -132,17 +131,11 @@ namespace TestProject1
             WeaponView? swordView = WeaponView.Create(actualSword);
             GameImpurities.Weapons.Add(character1.Id, swordView!.Value); //literally made above...
             int rng = 42;
-            var sw = new Stopwatch();
-            sw.Start();
-            GameImpurities.ResolveSpell(new SpellCastRequest() { SourceId = character1.Id, PrimaryTargetId = character2.Id, Spell = meleeAttack, RandomSeed = rng });
-            GameImpurities.UpdateResources();
-            sw.Stop();
-            double seconds = (double)sw.ElapsedTicks / Stopwatch.Frequency;
-            double nanosecondsPerCast = (seconds / 1000) * 1_000_000_000;
-            Console.WriteLine($"Spell resolution took {nanosecondsPerCast} ns");
+           SpellCastResult result = GameImpurities.ResolveSpell(new SpellCastEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng },swordView);
+            //GameImpurities.UpdateResources();
+
             int expectedDamage = 5 + (rng % (10 - 5 + 1)) + character1.BaseStats.Strength / 2; // Weapon damage plus strength bonus
-            int expectedHealth = (character2.BaseStats.Endurance * 10) - expectedDamage;
-            Assert.AreEqual(expectedHealth, GameImpurities.SortieStates[character2.Id].Resources[ResourceType.Health].Current);
+            Assert.AreEqual(expectedDamage*-1, result.ResourceChanges.ToList()[0].Amount);
         }
         [Test]
         public void A0_HotPath_Simple_Test()
@@ -165,8 +158,8 @@ namespace TestProject1
             var sw = new Stopwatch();
             sw.Start();
             for (int i = 0; i < 1000; i++)
-                GameImpurities.ResolveSpell(new SpellCastRequest() { SourceId = character1.Id, PrimaryTargetId = character2.Id, Spell = meleeAttack, RandomSeed = rng });
-            GameImpurities.UpdateResources();
+                GameImpurities.ResolveSpell(new SpellCastEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng }, swordView);
+            //GameImpurities.UpdateResources();
             sw.Stop();
             double seconds = (double)sw.ElapsedTicks / Stopwatch.Frequency;
             double nanosecondsPerCast = (seconds / 1000) * 1_000_000_000;
@@ -197,8 +190,8 @@ namespace TestProject1
             var sw = new Stopwatch();
             sw.Start();
             for (int i = 0; i < 1000; i++)
-                GameImpurities.ResolveSpell(new SpellCastRequest() { SourceId = character1.Id, PrimaryTargetId = character2.Id, Spell = rapidCycle, RandomSeed = rng });
-            GameImpurities.UpdateResources();
+                GameImpurities.ResolveSpell(new SpellCastEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = rapidCycle, RandomSeed = rng },swordView);
+            //GameImpurities.UpdateResources();
             sw.Stop();
             double seconds = (double)sw.ElapsedTicks / Stopwatch.Frequency;
             double nanosecondsPerCast = (seconds / 1000) * 1_000_000_000;
@@ -227,17 +220,38 @@ namespace TestProject1
             GameImpurities.Weapons.Add(character1.Id, swordView!.Value); //literally made above...
 
             int rng = 42;
-            GameImpurities.ResolveSpell(new SpellCastRequest() { PrimaryTargetId = character2.Id, SourceId = character1.Id,Spell = rapidCycle, RandomSeed = rng });
-            GameImpurities.UpdateResources();
+            SpellCastResult result = GameImpurities.ResolveSpell(new SpellCastEvent() { PrimaryTargetId = character2, SourceId = character1,Spell = rapidCycle, RandomSeed = rng }, swordView);
             int expectedTechDamage = 8 + (int)(character1.BaseStats.Agility * 0.6);
             int expectedComboPoints = 1;
             int expectedHeat = 20;
             int expectedWeaponDamage = SpellMath.CalculateWeaponDamage(swordView, character1.BaseStats.Strength, rng); //feel confident in this.
             int expectedHealth = (character2.BaseStats.Endurance * 10) - expectedTechDamage - expectedWeaponDamage;
 
-            Assert.AreEqual(expectedHealth, GameImpurities.SortieStates[character2.Id].Resources[ResourceType.Health].Current);
-            Assert.IsTrue(GameImpurities.SortieStates[character1.Id].Resources[ResourceType.ComboPoints].Current == expectedComboPoints);
-            Assert.IsTrue(GameImpurities.SortieStates[character1.Id].Resources[ResourceType.Heat].Current == expectedHeat);
+            int calculatedHealthLoss = 0;
+            foreach (ResourceChange change in result.ResourceChanges)
+            {
+                if (change.ResourceType == ResourceType.Health)
+                {
+                    Assert.AreEqual(character2.Id, change.CharacterId);
+                    calculatedHealthLoss += -change.Amount; //damage is negative, so negate it to get the health loss
+                    
+                }
+                else if (change.ResourceType == ResourceType.ComboPoints)
+                {
+                    Assert.AreEqual(character1.Id, change.CharacterId);
+                    Assert.AreEqual(expectedComboPoints, change.Amount);
+                }
+                else if (change.ResourceType == ResourceType.Heat)
+                {
+                    Assert.AreEqual(character1.Id, change.CharacterId);
+                    Assert.AreEqual(expectedHeat, change.Amount);
+                }
+                else
+                {
+                    Assert.Fail("Unexpected resource type in changes");
+                }
+            }
+            Assert.AreEqual(expectedTechDamage + expectedWeaponDamage, calculatedHealthLoss); //damage is negative, so negate it for the assertion
         }
     }
 }

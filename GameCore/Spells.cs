@@ -138,6 +138,14 @@ namespace GameCore
     {
         public Guid SourceId { get; init; }
         public Guid? PrimaryTargetId { get; init; }
+        public int SpellId { get; init; }
+        public int RandomSeed { get; init; }
+    }
+    public readonly record struct SpellCastEvent
+    {
+        public Character SourceId { get; init; }
+        public Character? PrimaryTargetId { get; init; }
+        public WeaponView? WeaponView { get; init; }
         public SpellDefinition Spell { get; init; }
         public int RandomSeed { get; init; }
     }
@@ -146,6 +154,7 @@ namespace GameCore
     {
         public bool Success { get; init; }
         public SpellFailReason FailureReason { get; init; }
+        public IReadOnlyCollection<ResourceChange>? ResourceChanges { get; init; }
     }
     public enum SpellFailReason
     {

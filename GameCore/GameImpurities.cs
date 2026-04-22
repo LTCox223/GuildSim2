@@ -42,62 +42,78 @@ namespace GameCore
             return EquipmentDatabase.GetDefinition(randomDefinition);
         }
 
-        public static SpellCastResult ResolveSpell(SpellCastRequest request)
+        public static void ApplyResourceChange(SpellCastResult result)
+        {
+            if (result.ResourceChanges == null || result.ResourceChanges.Count == 0)
+            {
+                return; // No resource changes to apply
+            }
+            List<ResourceChange> changes = result.ResourceChanges.ToList();
+            for (int i = 0; i < changes.Count; i++)
+            {
+                ResourceChange change = changes[i];
+                resourceChanges.Enqueue(change);
+            }
+        }
+
+        private static SpellCastEvent CreateSpellCastEvent(Guid sourceId, Guid? primaryTargetId, SpellDefinition spell, int randomSeed)
+        {
+            SpellCastEvent newEvent = new SpellCastEvent()
+            {
+                SourceId = Characters[sourceId],
+                PrimaryTargetId = primaryTargetId.HasValue ? Characters[primaryTargetId.Value] : null,
+                Spell = spell,
+                RandomSeed = randomSeed
+            };
+
+            return newEvent;
+        }
+
+        public static SpellCastResult ResolveSpell(SpellCastEvent request, WeaponView? weapon)
         {
             if (!request.PrimaryTargetId.HasValue)
             {
                 return new SpellCastResult() { Success = false, FailureReason = SpellFailReason.InvalidTarget };
             }
-            Guid targetId = request.PrimaryTargetId.Value;
-            SortieState caster = SortieStates[request.SourceId];
-            SortieState target = SortieStates[targetId];
-
+            SortieState target = SortieStates[request.PrimaryTargetId.Value.Id];
             if (!target.Resources.TryGetValue(ResourceType.Health, out ResourceState targetHealth))
             {
                 return new SpellCastResult() { Success = false, FailureReason = SpellFailReason.InvalidTarget }; //its... cant hit it.
             }
-
-
-
-
+            List<ResourceChange> changes = new List<ResourceChange>();
             foreach (SpellEffectDefinition effect in request.Spell.Effects)
             {
                 switch (effect.EffectKind)
                 {
                     case EffectKind.WeaponDamage:
-                        WeaponView? weapon;
-                        if (!Weapons.TryGetValue(request.SourceId, out WeaponView weaponCheck))
-                        {
-                            weapon = null; //unarmed attack
-                        }
-                        else
-                        {
-                            weapon = weaponCheck;
-                        }
-                        int damage = SpellMath.CalculateWeaponDamage(weapon, Characters[request.SourceId].BaseStats.Strength, request.RandomSeed)*-1;
-                        resourceChanges.Enqueue(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value, ResourceType = ResourceType.Health, Amount = damage });
+                        int damage = SpellMath.CalculateWeaponDamage(weapon, Characters[request.SourceId.Id].BaseStats.Strength, request.RandomSeed)*-1;
+                        changes.Add(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value.Id, ResourceType = ResourceType.Health, Amount = damage });
                         break;
                     case EffectKind.TechDamage:
-                        Character character = Characters[request.SourceId];
+                        Character character = Characters[request.SourceId.Id];
                         int techDamage = SpellMath.CalculateScaledValue(effect, character.BaseStats)*-1;
-                        resourceChanges.Enqueue(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value, ResourceType = ResourceType.Health, Amount = techDamage });
+                        changes.Add(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value.Id, ResourceType = ResourceType.Health, Amount = techDamage });
                         break;
                     case EffectKind.AddResource:
-                        Character sourceCharacter = Characters[request.SourceId];
+                        Character sourceCharacter = Characters[request.SourceId.Id];
                         int resourceAmount = SpellMath.CalculateScaledValue(effect, sourceCharacter.BaseStats);
                         
                         if (effect.TargetKind != TargetKind.Self)
                         {
-                            resourceChanges.Enqueue(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
+                            changes.Add(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value.Id, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
                         }
                         else
-                            resourceChanges.Enqueue(new ResourceChange() { CharacterId = request.SourceId, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
+                            changes.Add(new ResourceChange() { CharacterId = request.SourceId.Id, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
                         break;
                 }
             }
-            return new SpellCastResult() { Success = true };
+            return new SpellCastResult() { Success = true, ResourceChanges = changes};
         }
-        public static void UpdateResources()
+        public static void EndCycle()
+        {
+            UpdateResources();
+        }
+        private static void UpdateResources()
         {
 
             if (resourceChanges.Count == 0)
