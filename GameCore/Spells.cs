@@ -6,31 +6,21 @@ using System.Threading.Tasks;
 
 namespace GameCore
 {
-    public struct Spell
-    {
-        public int Id;
-        public string Name;
-        public double MinimumDistance;
-        public double MaximumDistance;
-        public bool RequiresLineOfSight;
-        public int? Value;
-    }
+
     public readonly record struct SpellDefinition
     {
         public int Id { get; init; }
         public string Name { get; init; }
-        public TargetKind TargetKind { get; init; }
-        public EffectKind EffectKind { get; init; }
-        public ResourceType ResourceType { get; init; }
         public double MinimumDistance { get; init; }
         public double MaximumDistance { get; init; }
         public bool RequiresLineOfSight { get; init; }
-        public IReadOnlyList<ResourceChange> Costs { get; init; }
-        public IReadOnlyList<ResourceChange> Gains { get; init; }
-        //public IReadOnlyList<SpellEffectDefinition> Effects { get; init; }
+
+        public IReadOnlyList<SpellEffectDefinition> Effects { get; init; }
+        public TimeSpan Cooldown { get; init; }
     }
     public readonly record struct ResourceState
     {
+        public ResourceType ResourceType { get; init; }
         public int Current { get; init; }
         public int Maximum { get; init; }
     }
@@ -38,13 +28,16 @@ namespace GameCore
     public readonly record struct SpellEffectDefinition
     {
         public EffectKind EffectKind { get; init; }
+        public TargetKind TargetKind { get; init; }
         public int BaseValue { get; init; }
+        public bool AllowScaling { get; init; }
         public PrimaryStats.StatType? ScalingStat { get; init; }
         public double ScalingFactor { get; init; }
         public ResourceType? ResourceType { get; init; }
     }
     public readonly record struct ResourceChange
     {
+        public Guid CharacterId { get; init; }
         public ResourceType ResourceType { get; init; }
         public int Amount { get; init; }
     }
@@ -68,7 +61,9 @@ namespace GameCore
     }
     public enum EffectKind
     {
-        Damage,
+        WeaponDamage,
+        TechDamage,
+        PsiDamage,
         Heal,
         AddResource,
         SpendResource,
@@ -79,39 +74,86 @@ namespace GameCore
         StanceChange
     }
 
-    public static class DamageSpells
+    public static class SpellDatabase
     {
-        public static Spell AutoAttack;
-        static DamageSpells()
+        private static readonly Dictionary<int, SpellDefinition> _spells = new();
+
+        public static void Add(SpellDefinition spell)
         {
-            AutoAttack = new Spell() { Id = 0, Name = "Auto Attack", MinimumDistance = 0, MaximumDistance = 1.5, RequiresLineOfSight = false };
+            _spells.Add(spell.Id, spell);
         }
-        public static int DealWeaponDamage(EquipmentInstance? weapon, int statModifier, int rndNumber)
+
+        public static SpellDefinition Get(int id)
         {
-            if (weapon.HasValue && weapon.Value.Definition != null)
+            return _spells[id];
+        }
+    }
+
+    public static class SpellMath
+    {
+        static SpellMath()
+        {
+        }
+        public static int CalculateScaledValue(
+        SpellEffectDefinition effect,
+        PrimaryStats stats
+        )
+        {
+            if (effect.AllowScaling && effect.ScalingStat.HasValue)
             {
-                int? minDamage = weapon.Value.Definition.AttackMin;
-                int? maxDamage = weapon.Value.Definition.AttackMax;
+                int statValue = effect.ScalingStat.Value switch
+                {
+                    PrimaryStats.StatType.Endurance => stats.Endurance,
+                    PrimaryStats.StatType.Strength => stats.Strength,
+                    PrimaryStats.StatType.Agility => stats.Agility,
+                    PrimaryStats.StatType.Willpower => stats.Willpower,
+                    _ => 0
+                };
+                return (int)(effect.BaseValue + statValue * effect.ScalingFactor);
+            }
+            else if (effect.AllowScaling)
+            {
+                return (int)(effect.BaseValue * effect.ScalingFactor);
+            }
+            else
+            {
+                return effect.BaseValue;
+            }
+        }
+        public static int CalculateWeaponDamage(WeaponView? weapon, int strengthModifier, int rndNumber)
+        {
+            if (weapon.HasValue)
+            {
+                int? minDamage = weapon.Value.AttackMin;
+                int? maxDamage = weapon.Value.AttackMax;
                 int? baseDamage = minDamage + (rndNumber % (maxDamage - minDamage + 1));
-                int damage = baseDamage!.Value + statModifier / 2; // Placeholder for actual damage calculation logic
+                int damage = baseDamage!.Value + strengthModifier / 2; // Placeholder for actual damage calculation logic
                 return damage;
             }
             
-            return statModifier / 4;
+            return strengthModifier / 4;
         }
     }
     public readonly record struct SpellCastRequest
     {
         public Guid SourceId { get; init; }
         public Guid? PrimaryTargetId { get; init; }
-        public int SpellId { get; init; }
+        public SpellDefinition Spell { get; init; }
         public int RandomSeed { get; init; }
     }
 
     public readonly record struct SpellCastResult
     {
         public bool Success { get; init; }
-        public string? FailureReason { get; init; }
-        public IReadOnlyList<StateChange> Changes { get; init; }
+        public SpellFailReason FailureReason { get; init; }
+    }
+    public enum SpellFailReason
+    {
+        None,
+        OutOfRange,
+        NoLineOfSight,
+        InsufficientResources,
+        InvalidTarget,
+        OnCooldown
     }
 }

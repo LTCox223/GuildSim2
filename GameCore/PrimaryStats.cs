@@ -183,6 +183,17 @@ namespace GameCore
             if (Agility > 0) yield return StatType.Agility;
             if (Willpower > 0) yield return StatType.Willpower;
         }
+        public int GetStat(StatType statType)
+        {
+            return statType switch
+            {
+                StatType.Endurance => Endurance,
+                StatType.Strength => Strength,
+                StatType.Agility => Agility,
+                StatType.Willpower => Willpower,
+                _ => throw new ArgumentException("Invalid stat type")
+            };
+        }
 
         public static PrimaryStats Zero => new PrimaryStats //zeroed out stats for use as a base when modifying stats
         {

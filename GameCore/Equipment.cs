@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace GameCore
 {
+    #region Enums for Equipment
     public enum EquipmentSlot
     {
         Head,
@@ -48,7 +49,9 @@ namespace GameCore
         Epic,
         Legendary
     }
+    #endregion
 
+    #region Definitions and Instances
     public sealed record EquipmentDefinition
     {
         public int ID { get; init; }
@@ -80,7 +83,7 @@ namespace GameCore
 
     }
 
-    public struct EquipmentInstance
+    public readonly record struct EquipmentInstance
     {
         public Guid InstanceId { get; init; }
         public EquipmentDefinition Definition { get; init; }
@@ -89,7 +92,37 @@ namespace GameCore
         public PrimaryStats Stats { get; init; }
     }
 
+    public readonly struct WeaponView //specialized struct for weapons to make access easier.
+    {
+        private readonly EquipmentInstance _weapon;
+        public int AttackMin => _weapon.Definition.AttackMin ?? 0;
+        public int AttackMax => _weapon.Definition.AttackMax ?? 0;
+        private WeaponView(EquipmentInstance weapon)
+        {
+            _weapon = weapon;
+        }
+        public static bool TryCreate(EquipmentInstance instance, out WeaponView weaponView)
+        {
+            if (instance.Definition.Category == EquipmentCategory.Weapon)
+            {
+                weaponView = new WeaponView(instance);
+                return true;
+            }
+            weaponView = default;
+            return false;
+        }
+        public static WeaponView? Create(EquipmentInstance instance)
+        {
+            if (instance.Definition.Category == EquipmentCategory.Weapon)
+            {
+                return new WeaponView(instance);
+            }
+            return null;
+        }
+    }
+    #endregion
 
+    #region Databases
     public static class EquipmentDatabase
     {
         private static Dictionary<int, EquipmentDefinition> _definitions = new Dictionary<int, EquipmentDefinition>();
@@ -143,7 +176,7 @@ namespace GameCore
         }
     }
 
-    public static class ModifierDatabase
+    public static class ItemModifierDatabase
     {
         private static List<ItemModifierTemplate> _modifiers = new List<ItemModifierTemplate>();
         public static int ModifierCount => _modifiers.Count;
@@ -196,6 +229,16 @@ namespace GameCore
             return modifiedName;
         }
     }
+    #endregion
+    /// <summary>
+    /// The EquipmentGenerator class is responsible for creating instances of equipment based on their definitions and optional modifiers. 
+    /// It takes into account the item's level, rarity, and the stat bonuses provided by the modifier to generate a final set of stats for 
+    /// the equipment instance. 
+    /// The generator also constructs the display name of the item by applying the modifier's name pattern to the base name of the equipment definition. 
+    /// This class serves as a central point for all logic related to generating equipment instances in the game.
+    /// The Generator requires everything an Equipment Instance needs to be generated.
+    /// EquipmentGenerator is not responsible for determining what equipment to generate.
+    /// </summary>
     public static class EquipmentGenerator
     {
 
@@ -204,7 +247,7 @@ namespace GameCore
             if (definition.CanRollModifiers && modifier != null)
             {
                 PrimaryStats scaledStats = ScaledBonuses(definition.Rarity, definition.ItemLevel, modifier.StatBonuses);
-                string displayName = ModifierDatabase.ApplyModifierName(definition.BaseName, modifier);
+                string displayName = ItemModifierDatabase.ApplyModifierName(definition.BaseName, modifier);
                 //instance.DisplayName = definition.BaseName;
                 PrimaryStats primaryStats = scaledStats;
                 EquipmentInstance generated = new EquipmentInstance
@@ -242,10 +285,12 @@ namespace GameCore
             PrimaryStats newStats = PrimaryStats.ModifyStats(baseStats, baseStats.GetNonZeroStats().ToList(), levelBonus) * rarityMultiplier;
             return newStats;
         }
-
-
     }
 
+    #region Equipment DTOs
+    /// <summary>
+    /// Data Transfer Objects for importing equipment definitions and item modifier templates from external sources (e.g., JSON files, databases). These DTOs are designed to be simple and serializable, without any behavior or logic. They serve as a bridge between the raw data and the internal representations used by the game.
+    /// </summary>
     public record EquipmentDefinitionDto
     {
         public int ID { get; init; }
@@ -283,4 +328,5 @@ namespace GameCore
         public bool IsPrefix { get; init; }
         public bool IsSuffix { get; init; }
     }
+    #endregion
 }
