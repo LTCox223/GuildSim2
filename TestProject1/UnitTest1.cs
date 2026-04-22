@@ -145,7 +145,7 @@ namespace TestProject1
             Assert.AreEqual(expectedHealth, GameImpurities.SortieStates[character2.Id].Resources[ResourceType.Health].Current);
         }
         [Test]
-        public void A0_HotPath_Test()
+        public void A0_HotPath_Simple_Test()
         {
             Character character1 = new Character(Guid.NewGuid(), "Test Character 1", new PrimaryStats(10, 10, 10, 10, 10));
             Character character2 = new Character(Guid.NewGuid(), "Test Character 2", new PrimaryStats(15, 10, 10, 10, 10));
@@ -172,8 +172,40 @@ namespace TestProject1
             double nanosecondsPerCast = (seconds / 1000) * 1_000_000_000;
             Console.WriteLine($"Spell resolution took {nanosecondsPerCast} ns");
         }
-
         [Test]
+        public void A1_HotPath_Complex_Test() //do me first.
+        {
+            Character character1 = new Character(Guid.NewGuid(), "Test Character 1", new PrimaryStats(10, 10, 10, 10, 10));
+            Character character2 = new Character(Guid.NewGuid(), "Test Character 2", new PrimaryStats(15, 10, 10, 10, 10));
+            GameImpurities.Characters.Add(character1.Id, character1);
+            GameImpurities.Characters.Add(character2.Id, character2);
+            ResourceState char1HP = new ResourceState() { ResourceType = ResourceType.Health, Current = character1.BaseStats.Endurance * 10, Maximum = character1.BaseStats.Endurance * 10 };
+            ResourceState char1Heat = new ResourceState() { ResourceType = ResourceType.Heat, Current = 0, Maximum = 100 };
+            ResourceState char1ComboPoints = new ResourceState() { ResourceType = ResourceType.ComboPoints, Current = 0, Maximum = 5 };
+            ResourceState char2HP = new ResourceState() { ResourceType = ResourceType.Health, Current = character2.BaseStats.Endurance * 10, Maximum = character2.BaseStats.Endurance * 10 };
+            SortieState char1State = new SortieState() { Resources = new Dictionary<ResourceType, ResourceState>() { { ResourceType.Health, char1HP }, { ResourceType.Heat, char1Heat }, { ResourceType.ComboPoints, char1ComboPoints }, } };
+            SortieState char2State = new SortieState() { Resources = new Dictionary<ResourceType, ResourceState>() { { ResourceType.Health, char2HP } } };
+            GameImpurities.SortieStates.Add(character1.Id, char1State);
+            GameImpurities.SortieStates.Add(character2.Id, char2State);
+            EquipmentDefinition swordDefinition = new EquipmentDefinition() { ID = 1, BaseName = "Test Sword", Slot = EquipmentSlot.MainHand, AttackMin = 5, AttackMax = 10, CanRollModifiers = false, StatBonuses = new PrimaryStats(0, 0, 0, 0, 0), Category = EquipmentCategory.Weapon };
+
+            EquipmentInstance actualSword = EquipmentGenerator.GenerateInstance(Guid.NewGuid(), swordDefinition, null);
+            WeaponView? swordView = WeaponView.Create(actualSword);
+            GameImpurities.Weapons.Add(character1.Id, swordView!.Value); //literally made above...
+
+            int rng = 42;
+            var sw = new Stopwatch();
+            sw.Start();
+            for (int i = 0; i < 1000; i++)
+                GameImpurities.ResolveSpell(new SpellCastRequest() { SourceId = character1.Id, PrimaryTargetId = character2.Id, Spell = rapidCycle, RandomSeed = rng });
+            GameImpurities.UpdateResources();
+            sw.Stop();
+            double seconds = (double)sw.ElapsedTicks / Stopwatch.Frequency;
+            double nanosecondsPerCast = (seconds / 1000) * 1_000_000_000;
+            Console.WriteLine($"Spell resolution took {nanosecondsPerCast} ns");
+        }
+
+            [Test]
         public void Spell_Test() //do me first.
         {
             Character character1 = new Character(Guid.NewGuid(), "Test Character 1", new PrimaryStats(10, 10, 10, 10, 10));

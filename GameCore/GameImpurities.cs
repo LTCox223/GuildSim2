@@ -83,10 +83,15 @@ namespace GameCore
                         resourceChanges.Enqueue(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value, ResourceType = ResourceType.Health, Amount = techDamage });
                         break;
                     case EffectKind.AddResource:
-
                         Character sourceCharacter = Characters[request.SourceId];
                         int resourceAmount = SpellMath.CalculateScaledValue(effect, sourceCharacter.BaseStats);
-                        resourceChanges.Enqueue(new ResourceChange() { CharacterId = request.SourceId, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
+                        
+                        if (effect.TargetKind != TargetKind.Self)
+                        {
+                            resourceChanges.Enqueue(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
+                        }
+                        else
+                            resourceChanges.Enqueue(new ResourceChange() { CharacterId = request.SourceId, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
                         break;
                 }
             }
