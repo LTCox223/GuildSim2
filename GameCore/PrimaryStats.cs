@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace GameCore
 {
-    public struct PrimaryStats
+    public record struct PrimaryStats
     {
         public enum StatType
         {
@@ -112,7 +112,6 @@ namespace GameCore
                     break;
                 case StatType.Agility:
                     primaryStats.Agility = (int)Math.Round(primaryStats.Agility * value);
-                    break;
                     break;
                 case StatType.Willpower:
                     primaryStats.Willpower = (int)Math.Round(primaryStats.Willpower * value);

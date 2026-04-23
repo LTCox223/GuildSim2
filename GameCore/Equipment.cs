@@ -55,7 +55,7 @@ namespace GameCore
     public sealed record EquipmentDefinition
     {
         public int ID { get; init; }
-        public string BaseName { get; init; }
+        public required string BaseName { get; init; }
         public EquipmentCategory Category { get; init; }
         public EquipmentSlot Slot { get; init; }
 
@@ -92,7 +92,7 @@ namespace GameCore
         public PrimaryStats Stats { get; init; }
     }
 
-    public readonly struct WeaponView //specialized struct for weapons to make access easier.
+    public readonly record struct WeaponView //specialized struct for weapons to make access easier.
     {
         private readonly EquipmentInstance _weapon;
         public int AttackMin => _weapon.Definition.AttackMin ?? 0;

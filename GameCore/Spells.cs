@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace GameCore
 {
-
+    
     public readonly record struct SpellDefinition
     {
         public int Id { get; init; }
@@ -14,9 +14,11 @@ namespace GameCore
         public double MinimumDistance { get; init; }
         public double MaximumDistance { get; init; }
         public bool RequiresLineOfSight { get; init; }
-
+        public CastType CastType { get; init; }
+        public bool AdhereToGlobalCooldown { get; init; }
+        public TimeSpan? Duration { get; init; }
         public IReadOnlyList<SpellEffectDefinition> Effects { get; init; }
-        public TimeSpan Cooldown { get; init; }
+        public TimeSpan? Cooldown { get; init; }
     }
     public readonly record struct ResourceState
     {
@@ -34,6 +36,7 @@ namespace GameCore
         public PrimaryStats.StatType? ScalingStat { get; init; }
         public double ScalingFactor { get; init; }
         public ResourceType? ResourceType { get; init; }
+        
     }
     public readonly record struct ResourceChange
     {
@@ -50,6 +53,12 @@ namespace GameCore
         Focus,
         ComboPoints,
         Health
+    }
+    public enum CastType
+    {
+        Instant,
+        Channeled,
+        Charged
     }
     public enum TargetKind
     {
@@ -87,6 +96,16 @@ namespace GameCore
         {
             return _spells[id];
         }
+        public static SpellDefinition GCD = new SpellDefinition
+        {
+            Id = 0,
+            Name = "Global Cooldown",
+            MinimumDistance = 0,
+            MaximumDistance = 0,
+            RequiresLineOfSight = false,
+            Effects = Array.Empty<SpellEffectDefinition>(),
+            Cooldown = TimeSpan.FromSeconds(1.5)
+        };
     }
 
     public static class SpellMath
@@ -141,7 +160,7 @@ namespace GameCore
         public int SpellId { get; init; }
         public int RandomSeed { get; init; }
     }
-    public readonly record struct SpellCastEvent
+    public readonly record struct SpellEvent
     {
         public Character SourceId { get; init; }
         public Character? PrimaryTargetId { get; init; }

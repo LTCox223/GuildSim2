@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 
 namespace GameCore
 {
-    public struct Character
+    public record struct Character
     {
-        public Guid Id { get; private set; }
-        public string Name { get; private set; }
+        public Guid Id { get; init; }
+        public string Name { get; init; }
         public PrimaryStats BaseStats { get; private set; }
         public List<EquipmentInstance> EquippedItems { get; private set; }
         public Character(Guid id, string name, PrimaryStats baseStats)

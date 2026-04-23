@@ -3,6 +3,7 @@ using GameCore;
 
 namespace TestProject1
 {
+
     public class CombatTests
     {
         private SpellDefinition meleeAttack { get; init; } = new SpellDefinition()
@@ -41,15 +42,18 @@ namespace TestProject1
                 }
             }
         };
-        private SpellDefinition rapidCycle { get; init; } = new SpellDefinition
+        private static SpellDefinition rapidCycle { get; } = new SpellDefinition
         {
             Id = 100,
             Name = "Rapid Cycle",
             MinimumDistance = 0,
             MaximumDistance = 30,
             RequiresLineOfSight = true,
+            AdhereToGlobalCooldown = false,
+            CastType = CastType.Instant,
+            Duration = null, //just to test it. 
             Effects = new[]
-            
+
     {
                 new SpellEffectDefinition
                 {
@@ -107,7 +111,7 @@ namespace TestProject1
             GameImpurities.SortieStates.Add(character1.Id, char1State);
             GameImpurities.SortieStates.Add(character2.Id, char2State);
             int rng = 42;
-            SpellCastResult result = GameImpurities.ResolveSpell(new SpellCastEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng }, null
+            SpellCastResult result = GameImpurities.ResolveSpell(new SpellEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng }, null
             );
             int expectedDamage = character1.BaseStats.Strength / 4*-1; // No weapon, so damage is based on strength only
 
@@ -131,7 +135,7 @@ namespace TestProject1
             WeaponView? swordView = WeaponView.Create(actualSword);
             GameImpurities.Weapons.Add(character1.Id, swordView!.Value); //literally made above...
             int rng = 42;
-           SpellCastResult result = GameImpurities.ResolveSpell(new SpellCastEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng },swordView);
+           SpellCastResult result = GameImpurities.ResolveSpell(new SpellEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng },swordView);
             //GameImpurities.UpdateResources();
 
             int expectedDamage = 5 + (rng % (10 - 5 + 1)) + character1.BaseStats.Strength / 2; // Weapon damage plus strength bonus
@@ -158,7 +162,7 @@ namespace TestProject1
             var sw = new Stopwatch();
             sw.Start();
             for (int i = 0; i < 1000; i++)
-                GameImpurities.ResolveSpell(new SpellCastEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng }, swordView);
+                GameImpurities.ResolveSpell(new SpellEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng }, swordView);
             //GameImpurities.UpdateResources();
             sw.Stop();
             double seconds = (double)sw.ElapsedTicks / Stopwatch.Frequency;
@@ -190,7 +194,7 @@ namespace TestProject1
             var sw = new Stopwatch();
             sw.Start();
             for (int i = 0; i < 1000; i++)
-                GameImpurities.ResolveSpell(new SpellCastEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = rapidCycle, RandomSeed = rng },swordView);
+                GameImpurities.ResolveSpell(new SpellEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = rapidCycle, RandomSeed = rng },swordView);
             //GameImpurities.UpdateResources();
             sw.Stop();
             double seconds = (double)sw.ElapsedTicks / Stopwatch.Frequency;
@@ -220,7 +224,7 @@ namespace TestProject1
             GameImpurities.Weapons.Add(character1.Id, swordView!.Value); //literally made above...
 
             int rng = 42;
-            SpellCastResult result = GameImpurities.ResolveSpell(new SpellCastEvent() { PrimaryTargetId = character2, SourceId = character1,Spell = rapidCycle, RandomSeed = rng }, swordView);
+            SpellCastResult result = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1,Spell = rapidCycle, RandomSeed = rng }, swordView);
             int expectedTechDamage = 8 + (int)(character1.BaseStats.Agility * 0.6);
             int expectedComboPoints = 1;
             int expectedHeat = 20;
