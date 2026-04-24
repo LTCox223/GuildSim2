@@ -1,4 +1,7 @@
-﻿using GameCore;
+﻿using System.Collections.Immutable;
+using System.Diagnostics;
+using GameCore;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client.Payloads;
 
 namespace TestProject1;
 
@@ -110,7 +113,7 @@ public class TimerTests
     public void Setup()
     {
         GameImpurities.Characters.Clear();
-        GameImpurities.SortieStates.Clear();
+        GameImpurities.ResourceStates.Clear();
         GameImpurities.StartCycle();
     }
 
@@ -129,14 +132,14 @@ public class TimerTests
         ResourceState char2HP = new ResourceState() { ResourceType = ResourceType.Health, Current = character2.BaseStats.Endurance * 10, Maximum = character2.BaseStats.Endurance * 10 };
         SortieState char1State = new SortieState() { Resources = new Dictionary<ResourceType, ResourceState>() { { ResourceType.Health, char1HP }, { ResourceType.Heat, char1Heat }, { ResourceType.ComboPoints, char1ComboPoints }, } };
         SortieState char2State = new SortieState() { Resources = new Dictionary<ResourceType, ResourceState>() { { ResourceType.Health, char2HP } } };
-        GameImpurities.SortieStates.Add(character1.Id, char1State);
-        GameImpurities.SortieStates.Add(character2.Id, char2State);
-
+        GameImpurities.ResourceStates.Add(character1.Id, char1State.Resources);
+        GameImpurities.ResourceStates.Add(character2.Id, char2State.Resources);
+        
         int rng = 42;
         SpellCastResult result = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1, Spell = rapidCycle, RandomSeed = rng }, null);
-        GameImpurities.RequestResourceChange(result); //commit the edits.
+        GameImpurities.RequestResourceChange(result.InstantCastResult.Value); //commit the edits.
 
-        HashSet<ActiveTimer> expiredTimers = new HashSet<ActiveTimer>();
+        
         t.timeSpan = TimeSpan.FromSeconds(1); //simulating a full second of timing.
         GameImpurities.EndCycle();
         GameImpurities.StartCycle();
@@ -154,16 +157,19 @@ public class TimerTests
 
         result  = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1, Spell = chargeCycle, RandomSeed = rng }, null);
         Assert.That(result.Success);
-        Assert.That(result.ResourceChanges, Is.Null); //this completed, but has to go into the timers to finish casting.
+        Assert.That(result.InstantCastResult, Is.Null); //this completed, but has to go into the timers to finish casting.
         t.timeSpan = TimeSpan.FromSeconds(4); //four seconds have passed since simulation start.
+
         GameImpurities.EndCycle();
+        
         GameImpurities.StartCycle();
         t.timeSpan = TimeSpan.FromSeconds(5); //5 seconds have passed since simulation start.
         GameImpurities.EndCycle();
-        expiredTimers = GameImpurities.ExpiredTimers().ToHashSet();
+        HashSet<ActiveTimer> expiredTimers = GameImpurities.ExpiredTimers();
         GameImpurities.StartCycle();
+        
         result2 = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1, Spell = rapidCycle, RandomSeed = rng }, null);
         Assert.That(result2.FailureReason, Is.EqualTo(SpellFailReason.None));
-
+        
     }
 }

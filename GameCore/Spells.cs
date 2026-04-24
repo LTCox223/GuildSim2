@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace GameCore
 {
-    
+    #region Spell Data
     public readonly record struct SpellDefinition
     {
         public int Id { get; init; }
@@ -44,7 +44,9 @@ namespace GameCore
         public ResourceType ResourceType { get; init; }
         public int Amount { get; init; }
     }
+    #endregion
 
+    #region Spell Enums
     public enum ResourceType
     {
         PsiPoints,
@@ -82,6 +84,7 @@ namespace GameCore
         ModifyCooldown,
         StanceChange
     }
+    #endregion
 
     public static class SpellDatabase
     {
@@ -107,7 +110,7 @@ namespace GameCore
             Cooldown = TimeSpan.FromSeconds(1.5)
         };
     }
-
+    
     public static class SpellMath
     {
         static SpellMath()
@@ -153,6 +156,7 @@ namespace GameCore
             return strengthModifier / 4;
         }
     }
+    #region Spell Lifecycle
     public readonly record struct SpellCastRequest
     {
         public Guid SourceId { get; init; }
@@ -168,12 +172,24 @@ namespace GameCore
         public SpellDefinition Spell { get; init; }
         public int RandomSeed { get; init; }
     }
-
+    public readonly record struct PendingSpellCast
+    {
+        public Guid OwnerId { get; init; }
+        public int SpellId { get; init; }
+        public SpellEvent SpellEvent { get; init; }
+        public WeaponView? WeaponView { get; init; }
+    }
     public readonly record struct SpellCastResult
     {
         public bool Success { get; init; }
         public SpellFailReason FailureReason { get; init; }
-        public IReadOnlyCollection<ResourceChange>? ResourceChanges { get; init; }
+        public SpellEffectResult? InstantCastResult { get; init; } //specifically 
+        }
+        public readonly record struct SpellEffectResult
+    {
+        public bool Success { get; init; }
+        public SpellFailReason FailureReason { get; init; }
+        public IReadOnlyList<ResourceChange>? ResourceChanges { get; init; }
     }
     public enum SpellFailReason
     {
@@ -184,4 +200,5 @@ namespace GameCore
         InvalidTarget,
         OnCooldown
     }
+    #endregion
 }
