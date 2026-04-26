@@ -23,6 +23,7 @@ namespace GameCore
         private static Queue<TimerRequest> timerRequests { get; set; } = new Queue<TimerRequest>();
         private static HashSet<ActiveTimer> activeTimers { get; set; } = new HashSet<ActiveTimer>();
         private static HashSet<Guid> activeGcdOwners { get; set; } = new();
+        private static HashSet<Guid> MovingCharacters { get; set;} = new();
         private static HashSet<(Guid OwnerId, int SpellId)> activeSpellLocks { get; set; } = new();
         public static Random Random { get; private set; } = new Random();
         #endregion
@@ -82,6 +83,7 @@ namespace GameCore
              * Else timers are valid.
              */
             bool hasSpellTimer = activeSpellLocks.Contains((request.SourceId.Id, request.Spell.Id));
+            bool hasPendingCast = pendingSpellCasts.ContainsKey(request.SourceId.Id);
             bool hasGcdTimer = request.Spell.AdhereToGlobalCooldown &&
                                activeGcdOwners.Contains(request.SourceId.Id);
             if (hasSpellTimer)
@@ -93,6 +95,8 @@ namespace GameCore
             {
                 return new SpellCastResult() { Success = false, FailureReason = SpellFailReason.OnCooldown };
             }
+            if (hasPendingCast)
+                return new SpellCastResult() { Success = false, FailureReason = SpellFailReason.AlreadyCasting };
 
             //Handle GCD if applicable. If the spell adheres to GCD, put a GCD timer up for the character.
             if (request.Spell.AdhereToGlobalCooldown)
@@ -115,7 +119,7 @@ namespace GameCore
                     TimerRequest channelTimer = new TimerRequest()
                     {
                         SourceId = request.SourceId,
-                        PendingSpellCast = new PendingSpellCast() { SpellEvent = request, OwnerId = request.SourceId.Id, SpellId = request.Spell.Id, WeaponView = weapon},
+                        PendingSpellCast = request,
                         ExpireAtTime = CurrentTime + request.Spell.Duration!.Value,
                         Kind = TimerKind.Channel
                     };
@@ -126,7 +130,7 @@ namespace GameCore
                     TimerRequest chargeTimer = new TimerRequest()
                     {
                         SourceId = request.SourceId,
-                        PendingSpellCast = new PendingSpellCast() { SpellEvent = request, OwnerId = request.SourceId.Id, SpellId = request.Spell.Id, WeaponView = weapon },
+                        PendingSpellCast = request,
                         ExpireAtTime = CurrentTime + request.Spell.Duration!.Value,
                         Kind = TimerKind.Charged
                     };
@@ -146,7 +150,7 @@ namespace GameCore
                     SourceId = request.SourceId,
                     Kind = TimerKind.SpellCooldown,
                     ExpireAtTime = CurrentTime + request.Spell.Cooldown!.Value,
-                    PendingSpellCast = new PendingSpellCast() { OwnerId = request.SourceId.Id, SpellEvent = request, SpellId = request.Spell.Id, WeaponView = weapon },
+                    PendingSpellCast = request
                 };
                 timerRequests.Enqueue(cooldownTimer);
             }
@@ -291,7 +295,9 @@ namespace GameCore
 
             CurrentTime = SimulationTick!.AdvanceTime(); //last point in the cycle. Nothing comes after this.
         }
-        
+        private static void CancelCasts()
+        {
+        }
         public static HashSet<ActiveTimer> ExpiredTimers()
         {
             return activeTimers.Where(timer => timer.IsExpired(CurrentTime)).ToHashSet();
@@ -302,18 +308,23 @@ namespace GameCore
             while (timerRequests.Count > 0)
             {
                 TimerRequest request = timerRequests.Dequeue();
+                if (request.PendingSpellCast.HasValue)
+                {
+                    
+                }
                 ActiveTimer newTimer = new ActiveTimer()
                 {
                     OwnerId = request.SourceId.Id,
                     ExpireTime = request.ExpireAtTime,
                     Key = request.Kind,
-                    SpellId = request.PendingSpellCast?.SpellId
+                    SpellId = request.PendingSpellCast?.Spell.Id,
                 };
                 activeTimers.Add(newTimer);
 
-                if (request.PendingSpellCast.HasValue && request.PendingSpellCast.Value.SpellEvent.Spell.CastType != CastType.Instant)
+                if (request.PendingSpellCast.HasValue && request.PendingSpellCast.Value.Spell.CastType != CastType.Instant)
                 {
-                    pendingSpellCasts.Add(request.SourceId.Id,request.PendingSpellCast.Value);
+                    PendingSpellCast pendingSpellCast = new PendingSpellCast() { OwnerId = request.SourceId.Id, SpellEvent = request.PendingSpellCast, timer = newTimer, WeaponView = request.PendingSpellCast.Value.WeaponView};
+                    pendingSpellCasts.Add(request.SourceId.Id,pendingSpellCast);
                 }
                 if (request.Kind == TimerKind.GCD)
                 {
@@ -327,19 +338,19 @@ namespace GameCore
         }
         public static SpellEffectResult SpellCastResult(PendingSpellCast pendingSpellCast)
         {
-            if (pendingSpellCast.SpellEvent.Spell.Cooldown.HasValue && pendingSpellCast.SpellEvent.Spell.Cooldown.Value != TimeSpan.Zero)
+            if (pendingSpellCast.SpellEvent!.Value.Spell.Cooldown.HasValue && pendingSpellCast.SpellEvent!.Value.Spell.Cooldown.Value != TimeSpan.Zero)
             {
                 
                 TimerRequest cooldownTimer = new TimerRequest()
                 {
-                    SourceId = pendingSpellCast.SpellEvent.SourceId,
+                    SourceId = pendingSpellCast.SpellEvent!.Value.SourceId,
                     Kind = TimerKind.SpellCooldown,
-                    ExpireAtTime = CurrentTime + pendingSpellCast.SpellEvent.Spell.Cooldown.Value,
-                    PendingSpellCast = pendingSpellCast
+                    ExpireAtTime = CurrentTime + pendingSpellCast.SpellEvent!.Value.Spell.Cooldown.Value,
+                    PendingSpellCast = pendingSpellCast.SpellEvent
                 };
                 timerRequests.Enqueue(cooldownTimer);
             }
-            return ResolveEffects(pendingSpellCast.SpellEvent, pendingSpellCast.WeaponView);
+            return ResolveEffects(pendingSpellCast.SpellEvent.Value, pendingSpellCast.WeaponView);
         }
         private static bool TryUpdateResources(Queue<ResourceChange> resourceChanges, Dictionary<Guid, Dictionary<ResourceType, ResourceState>> previousState, out Dictionary<Guid, Dictionary<ResourceType, ResourceState>> changedResources)
         {
@@ -382,6 +393,20 @@ namespace GameCore
             return true;
         }
 
+        public static bool CharacterMoving(Guid playerId)
+        {
+            if (!MovingCharacters.Contains(playerId))
+                MovingCharacters.Add(playerId);
+            if (pendingSpellCasts.ContainsKey(playerId))
+            {
+                activeTimers.Remove(pendingSpellCasts[playerId].timer);
+                pendingSpellCasts.Remove(playerId);
+                if (activeGcdOwners.Contains(playerId))
+                    activeGcdOwners.Remove(playerId);
+                
+            }
+            return true;
+        }
         public class ImpuritiesSimulationTick : ISimulationTimeAdvance
         {
             private bool firstCycle = true;
@@ -437,14 +462,7 @@ namespace GameCore
         public Character SourceId { get; init; }
         public TimeSpan ExpireAtTime { get; init; }
         public TimerKind Kind { get; init; }
-        public PendingSpellCast? PendingSpellCast { get; init; }
-    }
-
-    public readonly record struct TimerKey
-    {
-        public Guid OwnerId { get; init; }
-        public TimerKind Kind { get; init; }
-        public int? SpellId { get; init; }
+        public SpellEvent? PendingSpellCast { get; init; }
     }
 
     public interface ISimulationTimeAdvance

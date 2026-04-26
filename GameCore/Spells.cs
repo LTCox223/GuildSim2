@@ -172,11 +172,16 @@ namespace GameCore
         public SpellDefinition Spell { get; init; }
         public int RandomSeed { get; init; }
     }
+
+    public readonly record struct CancelSpell //pull things out of GCD and pendingSpellCast
+    {
+        public Guid OwnerId { get; init; }
+    }
     public readonly record struct PendingSpellCast
     {
         public Guid OwnerId { get; init; }
-        public int SpellId { get; init; }
-        public SpellEvent SpellEvent { get; init; }
+        public ActiveTimer timer {get; init; }
+        public SpellEvent? SpellEvent { get; init; }
         public WeaponView? WeaponView { get; init; }
     }
     public readonly record struct SpellCastResult
@@ -198,7 +203,8 @@ namespace GameCore
         NoLineOfSight,
         InsufficientResources,
         InvalidTarget,
-        OnCooldown
+        OnCooldown,
+        AlreadyCasting
     }
     #endregion
 }

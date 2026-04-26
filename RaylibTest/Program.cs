@@ -18,7 +18,8 @@ namespace RaylibTest
             {
                 Speed = 5f,
                 Radius = 8f,
-                DrawColor = Color.Blue
+                DrawColor = Color.Blue,
+                
             };
 
             RaylibThings.Actor enemy = new RaylibThings.Actor("Enemy", 550, 300)
@@ -36,19 +37,22 @@ namespace RaylibTest
             GameImpurities.ResourceStates.Add(player.Guid, char1State.Resources);
             GameImpurities.ResourceStates.Add(enemy.Guid, char2State.Resources);
 
-            Guid? selectedGuid = null;
+            RaylibThings.Actor? selectedTarget = null;
             List<RaylibThings.SpellBlock> spellBlocks = new();
             GameImpurities.InitializeGame();
             while (!Raylib.WindowShouldClose())
             {
-
                 GameImpurities.StartCycle();
                 // Movement
+                float tempY = player.Y;
+                float tempX = player.X;
                 if (Raylib.IsKeyDown(KeyboardKey.W)) player.Y -= player.Speed;
                 if (Raylib.IsKeyDown(KeyboardKey.S)) player.Y += player.Speed;
                 if (Raylib.IsKeyDown(KeyboardKey.A)) player.X -= player.Speed;
                 if (Raylib.IsKeyDown(KeyboardKey.D)) player.X += player.Speed;
 
+                if (tempX != player.X || tempY != player.Y)
+                    GameImpurities.CharacterMoving(player.Guid);
                 player.X = Math.Clamp(player.X, 0, screenWidth);
                 player.Y = Math.Clamp(player.Y, 0, screenHeight);
 
@@ -59,7 +63,7 @@ namespace RaylibTest
 
                     if (Raylib.CheckCollisionPointCircle(mousePos, new Vector2(enemy.X, enemy.Y), enemy.Radius))
                     {
-                        selectedGuid = enemy.Guid;
+                        selectedTarget = enemy;
                         Console.WriteLine($"Clicked enemy GUID: {enemy.Guid}");
                     }
                 }
@@ -67,8 +71,15 @@ namespace RaylibTest
                 // Fire spell at red circle with key 1
                 if (Raylib.IsKeyPressed(KeyboardKey.One))
                 {
-                    RaylibThings.SpellBlock spell = RaylibThings.ShootTestSpell(player, enemy);
-                    spellBlocks.Add(spell);
+                    RaylibThings.SpellBlock? spell = RaylibThings.ShootSpell(player, player.TestSpell1, selectedTarget);
+                    if (spell != null)
+                        spellBlocks.Add(spell);
+                }
+                if (Raylib.IsKeyPressed(KeyboardKey.Two))
+                {
+                    RaylibThings.SpellBlock? spell = RaylibThings.ShootSpell(player, player.TestSpell2, selectedTarget);
+                    if (spell != null)
+                        spellBlocks.Add(spell);
                 }
 
                 // Update spell projectiles
@@ -105,27 +116,22 @@ namespace RaylibTest
 
                 Raylib.DrawCircle((int)player.X, (int)player.Y, player.Radius, player.DrawColor);
                 Raylib.DrawText(
-    $"{GameImpurities.ResourceStates[enemy.Guid][ResourceType.Health].Current}/{GameImpurities.ResourceStates[enemy.Guid][ResourceType.Health].Maximum}",
-    (int)enemy.X - 20,
-    (int)enemy.Y - 25,
-    16,
-    Color.White);
+                    $"{GameImpurities.ResourceStates[enemy.Guid][ResourceType.Health].Current}/{GameImpurities.ResourceStates[enemy.Guid][ResourceType.Health].Maximum}",
+                    (int)enemy.X - 25,
+                    (int)enemy.Y - 25,
+                    16,
+                    Color.White);
                 Raylib.DrawCircle((int)enemy.X, (int)enemy.Y, enemy.Radius, enemy.DrawColor);
-
                 for (int i = 0; i < spellBlocks.Count; i++)
                 {
-                    Raylib.DrawCircle((int)spellBlocks[i].X, (int)spellBlocks[i].Y, 4f, Color.Yellow);
+                    Raylib.DrawCircle((int)spellBlocks[i].X, (int)spellBlocks[i].Y, 4f, spellBlocks[i].SpellColor);
                 }
-
-                if (selectedGuid.HasValue)
+                if (selectedTarget != null)
                 {
-                    Raylib.DrawText($"Selected: {selectedGuid.Value}", 20, 20, 20, Color.White);
+                    Raylib.DrawText($"Selected: {selectedTarget.Guid}", 20, 20, 20, Color.White);
                 }
-
-                Raylib.EndDrawing();
-                
+                Raylib.EndDrawing();                
             }
-
             Raylib.CloseWindow();
         }
     }
@@ -140,7 +146,8 @@ namespace RaylibTest
             public float Y { get; set; }
             public float Radius { get; set; } = 5f;
             public Color DrawColor { get; set; } = Color.Blue;
-            public SpellDefinition TestSpell { get; set; }
+            public SpellDefinition TestSpell1 { get; set; }
+            public SpellDefinition TestSpell2 {get; set; }
             public float Speed { get; set; } = 0.0f;
 
             public const float MAX_SPEED = 100.0f;
@@ -155,28 +162,36 @@ namespace RaylibTest
                 Guid = id;
                 BaseStats = new PrimaryStats(10, 10, 10, 10, 10);
                 GameImpurities.Characters.Add(id, new Character(id, name, BaseStats));
-                TestSpell = rapidCycle;
+                TestSpell1 = rapidCycle;
+                TestSpell2 = chargeCycle;
             }
         }
         
 
-        public static SpellBlock ShootTestSpell(Actor source, Actor? target)
+        public static SpellBlock? ShootSpell(Actor source, SpellDefinition spell, Actor? target)
         {
-            float dx = target.X - source.X;
-            float dy = target.Y - source.Y;
-            float length = MathF.Sqrt(dx * dx + dy * dy);
+            if (target == null)
+                return null;
             SpellEvent result;
             SpellCastRequest request = new SpellCastRequest()
             {
-                SourceId = source.Guid, PrimaryTargetId = target.Guid, SpellId = source.TestSpell.Id
+                SourceId = source.Guid, PrimaryTargetId = target.Guid, SpellId = spell.Id
             };
-            if (!GameImpurities.CreateTestSpellEvent(request, source.TestSpell, out result))
+            if (!GameImpurities.CreateTestSpellEvent(request, spell, out result))
             {
                 Console.WriteLine("Fail. No Target.");
-
+                return null;
             }
             SpellCastResult spellResults = GameImpurities.ResolveSpell(result, result.WeaponView);
-            GameImpurities.RequestResourceChange(spellResults.InstantCastResult!.Value);
+            if (spellResults.FailureReason != SpellFailReason.None)
+            {
+                return null;
+            }
+            float dx = target.X - source.X;
+            float dy = target.Y - source.Y;
+            float length = MathF.Sqrt(dx * dx + dy * dy);
+            if (spellResults.InstantCastResult!.HasValue && spellResults.InstantCastResult.Value.ResourceChanges != null && spellResults.InstantCastResult.Value.ResourceChanges.Count > 0)
+                GameImpurities.RequestResourceChange(spellResults.InstantCastResult!.Value);
             if (length == 0)
             {
                 length = 1;
@@ -184,14 +199,19 @@ namespace RaylibTest
 
             float dirX = dx / length;
             float dirY = dy / length;
-
+            Color color = Color.Black;
+            if (spell.Name == "Rapid Cycle")
+                color = Color.Yellow;
+            else
+                color = Color.Green;
             return new SpellBlock
             {
                 X = source.X,
                 Y = source.Y,
                 DirectionX = dirX,
                 DirectionY = dirY,
-                Speed = 8f
+                Speed = 8f,
+                SpellColor = color
             };
         }
 
@@ -202,6 +222,7 @@ namespace RaylibTest
             public float DirectionX { get; set; }
             public float DirectionY { get; set; }
             public float Speed { get; set; } = 0.0f;
+            public Color SpellColor {get; set; }
         }
 
         private static SpellDefinition rapidCycle { get; } = new SpellDefinition
@@ -250,5 +271,53 @@ namespace RaylibTest
             },
             Cooldown = TimeSpan.FromSeconds(5),
         };
+
+        private static SpellDefinition chargeCycle = new SpellDefinition()
+    {
+        Id = 101,
+        Name = "Charge Cycle",
+        MinimumDistance = 0,
+        MaximumDistance = 30,
+        RequiresLineOfSight = true,
+        AdhereToGlobalCooldown = true,
+        CastType = CastType.Charged,
+        Duration = TimeSpan.FromSeconds(3), //just to test it. 
+        Effects = new[]
+
+        {
+                new SpellEffectDefinition
+                {
+                    EffectKind = EffectKind.WeaponDamage,
+                    TargetKind = TargetKind.SingleEnemy,
+                    BaseValue = 0,
+                    ScalingStat = PrimaryStats.StatType.Strength,
+                    ScalingFactor = 0.25
+                },
+        new SpellEffectDefinition
+        {
+            EffectKind = EffectKind.TechDamage,
+            TargetKind = TargetKind.SingleEnemy,
+            BaseValue = 8,
+            AllowScaling = true,
+            ScalingStat = PrimaryStats.StatType.Agility,
+            ScalingFactor = 0.6
+        },
+        new SpellEffectDefinition
+        {
+            TargetKind = TargetKind.Self,
+            EffectKind = EffectKind.AddResource,
+            ResourceType = ResourceType.ComboPoints,
+            BaseValue = 1
+        },
+        new SpellEffectDefinition
+        {
+            TargetKind = TargetKind.Self,
+            EffectKind = EffectKind.AddResource,
+            ResourceType = ResourceType.Heat,
+            BaseValue = 20
+        }
+        }
+    };
+
     }
 }
