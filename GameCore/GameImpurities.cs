@@ -18,13 +18,14 @@ namespace GameCore
         public static Dictionary<Guid, Character> Characters { get; private set; } = new Dictionary<Guid, Character>(); //characters in the sortie, indexed by their unique ID. This is all characters.
         public static Dictionary<Guid, WeaponView> Weapons { get; private set; } = new Dictionary<Guid, WeaponView>(); //weapons from characters.
         public static Dictionary<Guid, Dictionary<ResourceType, ResourceState>> ResourceStates { get; private set; } = new Dictionary<Guid, Dictionary<ResourceType, ResourceState>>();
-        private static Dictionary<Guid,PendingSpellCast> pendingSpellCasts { get; set; } = new Dictionary<Guid, PendingSpellCast>();
+        private static Queue<SpellCastIntent> incomingSpellCasts { get; set; } = new();
         private static Queue<ResourceChange> resourceChanges { get; set; } = new Queue<ResourceChange>();
-        private static Queue<TimerRequest> timerRequests { get; set; } = new Queue<TimerRequest>();
-        private static HashSet<ActiveTimer> activeTimers { get; set; } = new HashSet<ActiveTimer>();
+
+        private static PriorityQueue<WakeTimer, TimeSpan> wakeTimers { get; set; } = new PriorityQueue<WakeTimer, TimeSpan>();
         private static HashSet<Guid> activeGcdOwners { get; set; } = new();
-        private static HashSet<Guid> MovingCharacters { get; set;} = new();
         private static HashSet<(Guid OwnerId, int SpellId)> activeSpellLocks { get; set; } = new();
+        private static Dictionary<Guid, Dictionary<WakeTimerKind, WakeTimer>> wakeTimersByOwner { get; set; } = new Dictionary<Guid, Dictionary<WakeTimerKind, WakeTimer>>();
+        private static Dictionary<Guid, AiMemorySet> AiMemory = new();
         public static Random Random { get; private set; } = new Random();
         #endregion
 
@@ -32,6 +33,10 @@ namespace GameCore
         public static int GetRandomInt(int min, int max)
         {
             return Random.Next(min, max);
+        }
+        public static int GetRandomInt()
+        {
+            return Random.Next();
         }
         private static int SetNewRandomSeed()
         {
@@ -60,298 +65,91 @@ namespace GameCore
         }
         #endregion
 
+        public static int GetHP(Guid id)
+        {
+            if(ResourceStates.TryGetValue(id, out Dictionary<ResourceType,ResourceState>? resources))
+            {
+                if (resources.ContainsKey(ResourceType.Health))
+                {
+                    return resources[ResourceType.Health].Current;
+                }
+                
+            }
+            return -1;
+        }
         #region GameLogic Functions
 
-        
 
-        public static SpellCastResult ResolveSpell(SpellEvent request, WeaponView? weapon)
+        public static bool InsertSpell(SpellCastIntent intent)
         {
-            //Target validation.
-            if (!request.PrimaryTargetId.HasValue)
-            {
-                return new SpellCastResult() { Success = false, FailureReason = SpellFailReason.InvalidTarget };
-            }
-            IReadOnlyDictionary<ResourceType, ResourceState> target = ResourceStates[request.PrimaryTargetId.Value.Id];
-            if (!target.TryGetValue(ResourceType.Health, out ResourceState targetHealth))
-            {
-                return new SpellCastResult() { Success = false, FailureReason = SpellFailReason.InvalidTarget }; //its... cant hit it.
-            }
-            /*
-             * Validate timers. 
-             * If there is a timer with the GUID of the character and the spell at all, fail. Spell is either on cooldown, or is being cast.
-             * If there is a timer with the GCD for the character, fail. Character is on GCD.
-             * Else timers are valid.
-             */
-            bool hasSpellTimer = activeSpellLocks.Contains((request.SourceId.Id, request.Spell.Id));
-            bool hasPendingCast = pendingSpellCasts.ContainsKey(request.SourceId.Id);
-            bool hasGcdTimer = request.Spell.AdhereToGlobalCooldown &&
-                               activeGcdOwners.Contains(request.SourceId.Id);
-            if (hasSpellTimer)
-            {
-                return new SpellCastResult() { Success = false, FailureReason = SpellFailReason.OnCooldown };
-            }
-
-            if (hasGcdTimer && request.Spell.AdhereToGlobalCooldown)
-            {
-                return new SpellCastResult() { Success = false, FailureReason = SpellFailReason.OnCooldown };
-            }
-            if (hasPendingCast)
-                return new SpellCastResult() { Success = false, FailureReason = SpellFailReason.AlreadyCasting };
-
-            //Handle GCD if applicable. If the spell adheres to GCD, put a GCD timer up for the character.
-            if (request.Spell.AdhereToGlobalCooldown)
-            {
-                TimerRequest gcdTimer = new TimerRequest()
-                {
-                    SourceId = request.SourceId,
-                    Kind = TimerKind.GCD,
-                    ExpireAtTime = CurrentTime + SpellDatabase.GCD.Cooldown!.Value
-                };
-                timerRequests.Enqueue(gcdTimer);
-            }
-            
-            //Handle CastType.
-            switch (request.Spell.CastType)
-            {
-                case CastType.Instant:
-                    break; //break the loop, you will get a resolution.
-                case CastType.Channeled:
-                    TimerRequest channelTimer = new TimerRequest()
-                    {
-                        SourceId = request.SourceId,
-                        PendingSpellCast = request,
-                        ExpireAtTime = CurrentTime + request.Spell.Duration!.Value,
-                        Kind = TimerKind.Channel
-                    };
-                    timerRequests.Enqueue(channelTimer);
-
-                    return new SpellCastResult() { Success = true };
-                case CastType.Charged:
-                    TimerRequest chargeTimer = new TimerRequest()
-                    {
-                        SourceId = request.SourceId,
-                        PendingSpellCast = request,
-                        ExpireAtTime = CurrentTime + request.Spell.Duration!.Value,
-                        Kind = TimerKind.Charged
-                    };
-                    timerRequests.Enqueue(chargeTimer);
-                    return new SpellCastResult() { Success = true };
-            }
-            SpellEffectResult results = ResolveEffects(request, weapon);
-            if (!results.Success)
-            {
-                return new SpellCastResult() { Success = false, FailureReason = SpellFailReason.None };
-            }
-
-            if (request.Spell.Cooldown.HasValue && request.Spell.Cooldown != TimeSpan.Zero)
-            {
-                TimerRequest cooldownTimer = new TimerRequest()
-                {
-                    SourceId = request.SourceId,
-                    Kind = TimerKind.SpellCooldown,
-                    ExpireAtTime = CurrentTime + request.Spell.Cooldown!.Value,
-                    PendingSpellCast = request
-                };
-                timerRequests.Enqueue(cooldownTimer);
-            }
-            return new SpellCastResult() { Success = true, FailureReason = SpellFailReason.None, InstantCastResult = results };
-        }
-
-        private static SpellEffectResult ResolveEffects(SpellEvent request, WeaponView? weapon)
-        {
-            List<ResourceChange> changes = new List<ResourceChange>();
-            foreach (SpellEffectDefinition effect in request.Spell.Effects)
-            {
-                switch (effect.EffectKind)
-                {
-                    case EffectKind.WeaponDamage:
-                        int damage = SpellMath.CalculateWeaponDamage(weapon, request.SourceId.BaseStats.Strength, request.RandomSeed) * -1;
-                        changes.Add(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value.Id, ResourceType = ResourceType.Health, Amount = damage });
-                        break;
-                    case EffectKind.TechDamage:
-                        Character character = request.SourceId;
-                        int techDamage = SpellMath.CalculateScaledValue(effect, character.BaseStats) * -1;
-                        changes.Add(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value.Id, ResourceType = ResourceType.Health, Amount = techDamage });
-                        break;
-                    case EffectKind.AddResource:
-                        Character sourceCharacter = request.SourceId;
-                        int resourceAmount = SpellMath.CalculateScaledValue(effect, sourceCharacter.BaseStats);
-
-                        if (effect.TargetKind != TargetKind.Self)
-                        {
-                            changes.Add(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value.Id, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
-                        }
-                        else
-                            changes.Add(new ResourceChange() { CharacterId = request.SourceId.Id, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
-                        break;
-                }
-
-            }
-            return new SpellEffectResult() { Success = true, ResourceChanges = changes };
+            incomingSpellCasts.Enqueue(intent);
+            return true;
         }
         #endregion
         #region State Modification Functions
-        public static bool CreateTestSpellEvent(SpellCastRequest request, SpellDefinition testSpell, out SpellEvent result)
-        {
-            result = new();
-            Character source = Characters[request.SourceId];
-            Character? actualTarget = null;
-            WeaponView? weaponView = null;
-            if (request.PrimaryTargetId != null)
-            {
-                bool test = Characters.TryGetValue(request.PrimaryTargetId.Value, out Character target);
-                if (test)
-                {
-                    actualTarget = target;
-                }
-            }
-            else
-            { return false; }
-            if (Weapons.TryGetValue(source.Id, out WeaponView weapon))
-            {
-                weaponView = weapon;
-            }
-            
-            
-            result = new SpellEvent() { SourceId = source, PrimaryTargetId = actualTarget, WeaponView = weaponView, RandomSeed = Random.Next(), Spell = testSpell};
-            return true;
-        }
         public static void InitializeGame()
         {
             if (SimulationTick == null)
             {
                 SimulationTick = new ImpuritiesSimulationTick();
             }
-             if (!SimulationTick.Initialized)
+            if (!SimulationTick.Initialized)
                 SimulationTick.AdvanceTime();
         } //must be void
         public static void StartCycle()
         {
-            HashSet<ActiveTimer> expired = ExpiredTimers(); //Find expired timers.
-            ProcessExpiredTimers(expired);
-            ProcessTimerRequests(timerRequests); //get timers out of queue and into the Hashset.
+
+            //ProcessExpiredTimers(expired);
         } //must be void.
-        public static IReadOnlyList<ExpiredTimer> ProcessExpiredTimers(HashSet<ActiveTimer> expired)
+        private static void RequestResourceChange(SpellEffectResult result)
         {
-            List<ExpiredTimer> expiredTimers = new List<ExpiredTimer>();
-            foreach (ActiveTimer time in expired)
+            if (result.ResourceChanges != null)
             {
-                ExpiredTimer timer = new ExpiredTimer() { ActiveTimer = time };
-                pendingSpellCasts.TryGetValue(time.OwnerId, out PendingSpellCast cast);
-
-                timer.PendingSpellCast = cast;
-                switch (timer.ActiveTimer.Key)
+                foreach (ResourceChange change in result.ResourceChanges)
                 {
-                    case TimerKind.Channel:
-                        SpellEffectResult channelResult = SpellCastResult(timer.PendingSpellCast.Value);
-                        expiredTimers.Add(new ExpiredTimer() { ActiveTimer = timer.ActiveTimer, PendingSpellCast = timer.PendingSpellCast.Value });
-                        pendingSpellCasts.Remove(time.OwnerId);
-                        RequestResourceChange(channelResult);
-                        break;
-                    case TimerKind.Charged:
-
-                        SpellEffectResult chargedResult = SpellCastResult(timer.PendingSpellCast.Value);
-                        expiredTimers.Add(new ExpiredTimer() { ActiveTimer = timer.ActiveTimer, PendingSpellCast = timer.PendingSpellCast.Value });
-                        pendingSpellCasts.Remove(time.OwnerId);
-                        RequestResourceChange(chargedResult);
-                        break;
-                    default:
-                        expiredTimers.Add(new ExpiredTimer() {ActiveTimer = timer.ActiveTimer });
-                        break;
-                }
-                if (activeGcdOwners.Contains(time.OwnerId))
-                {
-                    activeGcdOwners.Remove(time.OwnerId);
-                }
-                if (time.SpellId.HasValue && activeSpellLocks.Contains((time.OwnerId,time.SpellId.Value)))
-                {
-                    activeSpellLocks.Remove((time.OwnerId, time.SpellId.Value));
+                    resourceChanges.Enqueue(change);
                 }
             }
-            activeTimers.SymmetricExceptWith(expired); //Remove expired timers from active timers.
-            return expiredTimers;
-        } 
-        public static void RequestResourceChange(SpellEffectResult result)
+        }
+        private static void RequestResourceChange(Queue<SpellEffectResult> results)
         {
-            if (result.ResourceChanges == null || result.ResourceChanges.Count == 0)
+            while (results.Count > 0)
             {
-                return; // No resource changes to apply
-            }
-            for (int i = 0; i < result.ResourceChanges.Count; i++)
-            {
-                ResourceChange change = result.ResourceChanges[i];
-                resourceChanges.Enqueue(change);
+                SpellEffectResult spellEffectResult = results.Dequeue();
+                if (spellEffectResult.ResourceChanges == null)
+                {
+                    continue;
+                }
+                foreach (ResourceChange change in spellEffectResult.ResourceChanges)
+                {
+                    resourceChanges.Enqueue(change);
+                }
             }
         }
         public static void EndCycle()
         {
-            if (TryUpdateResources(resourceChanges,ResourceStates, out Dictionary<Guid, Dictionary<ResourceType, ResourceState>> changedResources))
-            {
-                foreach (var kvp in changedResources)
-                {
-                    ResourceStates[kvp.Key] = kvp.Value;
-                }
-            }
 
             CurrentTime = SimulationTick!.AdvanceTime(); //last point in the cycle. Nothing comes after this.
         }
-        private static void CancelCasts()
+        public static HashSet<WakeTimer> ExpireWakeTimers()
         {
-        }
-        public static HashSet<ActiveTimer> ExpiredTimers()
-        {
-            return activeTimers.Where(timer => timer.IsExpired(CurrentTime)).ToHashSet();
-        }
-        public static HashSet<ActiveTimer> GetActiveTimers() { return activeTimers; }
-        private static void ProcessTimerRequests(Queue<TimerRequest> timerRequests)
-        {
-            while (timerRequests.Count > 0)
+            HashSet<WakeTimer> expired = new();
+            while (wakeTimers.TryPeek(out WakeTimer? timer, out TimeSpan expireTime))
             {
-                TimerRequest request = timerRequests.Dequeue();
-                if (request.PendingSpellCast.HasValue)
+                if (expireTime > CurrentTime)
                 {
-                    
+                    break;
                 }
-                ActiveTimer newTimer = new ActiveTimer()
-                {
-                    OwnerId = request.SourceId.Id,
-                    ExpireTime = request.ExpireAtTime,
-                    Key = request.Kind,
-                    SpellId = request.PendingSpellCast?.Spell.Id,
-                };
-                activeTimers.Add(newTimer);
 
-                if (request.PendingSpellCast.HasValue && request.PendingSpellCast.Value.Spell.CastType != CastType.Instant)
-                {
-                    PendingSpellCast pendingSpellCast = new PendingSpellCast() { OwnerId = request.SourceId.Id, SpellEvent = request.PendingSpellCast, timer = newTimer, WeaponView = request.PendingSpellCast.Value.WeaponView};
-                    pendingSpellCasts.Add(request.SourceId.Id,pendingSpellCast);
-                }
-                if (request.Kind == TimerKind.GCD)
-                {
-                    activeGcdOwners.Add(newTimer.OwnerId);
-                }
-                if (request.Kind == TimerKind.SpellCooldown)
-                {
-                    activeSpellLocks.Add((newTimer.OwnerId, newTimer.SpellId!.Value));
-                }
+                wakeTimers.Dequeue();
+
+                if (timer.Cancelled)
+                    continue; //simply drop timers that were cancelled.
+                expired.Add(timer);
             }
+            return expired;
         }
-        public static SpellEffectResult SpellCastResult(PendingSpellCast pendingSpellCast)
-        {
-            if (pendingSpellCast.SpellEvent!.Value.Spell.Cooldown.HasValue && pendingSpellCast.SpellEvent!.Value.Spell.Cooldown.Value != TimeSpan.Zero)
-            {
-                
-                TimerRequest cooldownTimer = new TimerRequest()
-                {
-                    SourceId = pendingSpellCast.SpellEvent!.Value.SourceId,
-                    Kind = TimerKind.SpellCooldown,
-                    ExpireAtTime = CurrentTime + pendingSpellCast.SpellEvent!.Value.Spell.Cooldown.Value,
-                    PendingSpellCast = pendingSpellCast.SpellEvent
-                };
-                timerRequests.Enqueue(cooldownTimer);
-            }
-            return ResolveEffects(pendingSpellCast.SpellEvent.Value, pendingSpellCast.WeaponView);
-        }
+
         private static bool TryUpdateResources(Queue<ResourceChange> resourceChanges, Dictionary<Guid, Dictionary<ResourceType, ResourceState>> previousState, out Dictionary<Guid, Dictionary<ResourceType, ResourceState>> changedResources)
         {
             changedResources = null!;
@@ -389,23 +187,67 @@ namespace GameCore
             }
             changedResources = updatedResources;
 
-            
+
             return true;
         }
-
-        public static bool CharacterMoving(Guid playerId)
+        public static WakeTimer RequestWake(Guid ownerId, TimeSpan expireTime, WakeTimerKind kind)
         {
-            if (!MovingCharacters.Contains(playerId))
-                MovingCharacters.Add(playerId);
-            if (pendingSpellCasts.ContainsKey(playerId))
+            var timer = new WakeTimer
             {
-                activeTimers.Remove(pendingSpellCasts[playerId].timer);
-                pendingSpellCasts.Remove(playerId);
-                if (activeGcdOwners.Contains(playerId))
-                    activeGcdOwners.Remove(playerId);
-                
+                OwnerId = ownerId,
+                ExpireTime = expireTime,
+                Key = kind
+            };
+            return timer;
+        }
+        private static bool EnqueueWakes(List<WakeTimer> wakes)
+        {
+            for (int i = 0; i < wakes.Count; i++)
+            {
+                WakeTimer wakeTimer = wakes[i];
+                //if there is no one owning this timer, go ahead and add an entry.
+                if (!wakeTimersByOwner.TryGetValue(wakeTimer.OwnerId, out Dictionary<WakeTimerKind, WakeTimer>? timers))
+                {
+                    wakeTimersByOwner.Add(wakeTimer.OwnerId, new Dictionary<WakeTimerKind, WakeTimer>());
+                }
+                if (timers.ContainsKey(wakeTimer.Key))
+                {
+                    continue; //drop enqueue. Timer already exists for that entity.
+                }
+
+                wakeTimers.Enqueue(wakeTimer, wakeTimer.ExpireTime);
+                wakeTimersByOwner[wakeTimer.OwnerId][wakeTimer.Key] = wakeTimer;
             }
             return true;
+        }
+        public static bool TryCancelWake(Guid ownerId, WakeTimerKind kind, out WakeTimer? cancelledTimer)
+        {
+            cancelledTimer = null;
+            if (!wakeTimersByOwner.TryGetValue(ownerId, out Dictionary<WakeTimerKind, WakeTimer>? ownerTimers))
+            {
+                return false;
+            }
+
+            if (!ownerTimers.TryGetValue(kind, out WakeTimer? wakeTimer))
+            {
+                return false;
+            }
+
+            wakeTimer.Cancelled = true;
+            cancelledTimer = wakeTimer;
+
+            ownerTimers.Remove(kind);
+
+            if (ownerTimers.Count == 0)
+            {
+                wakeTimersByOwner.Remove(ownerId);
+            }
+
+            return true;
+        }
+        private static void AiThinkTime()
+        {
+
         }
         public class ImpuritiesSimulationTick : ISimulationTimeAdvance
         {
@@ -430,39 +272,28 @@ namespace GameCore
         }
         #endregion
     }
-
-
-
     public readonly record struct SortieState
     {
         public Dictionary<ResourceType, ResourceState> Resources { get; init; }
     }
-    public readonly record struct ActiveTimer
+
+    public sealed record WakeTimer
     {
-        public Guid OwnerId { get; init; } //who this timer belongs to.
-        public int? SpellId { get; init; }
+        public Guid OwnerId { get; init; } //what entity created this.
         public TimeSpan ExpireTime { get; init; }
+        public WakeTimerKind Key { get; init; }
         public bool IsExpired(TimeSpan currentTime) { return currentTime >= ExpireTime; }
-        public TimerKind? Key { get; init; }
+        public bool Cancelled { get; set; }
     }
-    public enum TimerKind
+    public enum WakeTimerKind
     {
-        GCD,
-        SpellCooldown,
-        Channel,
-        Charged
+        AiThink,
+        SpellGraphicFinish
     }
-    public sealed record ExpiredTimer
+    public readonly record struct CancelWakeRequest
     {
-        public PendingSpellCast? PendingSpellCast { get; set; }
-        public ActiveTimer ActiveTimer { get; init; }
-    }
-    public readonly record struct TimerRequest
-    {
-        public Character SourceId { get; init; }
-        public TimeSpan ExpireAtTime { get; init; }
-        public TimerKind Kind { get; init; }
-        public SpellEvent? PendingSpellCast { get; init; }
+        public Guid OwnerId { get; init; }
+        public WakeTimer TimerToCancel {get; init;}
     }
 
     public interface ISimulationTimeAdvance

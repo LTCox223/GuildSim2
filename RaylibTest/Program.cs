@@ -1,16 +1,18 @@
 ﻿using Raylib_cs;
 using GameCore;
 using System.Numerics;
+using Arch.Core;
 
 namespace RaylibTest
 {
     internal class Program
     {
+
         static void Main(string[] args)
         {
             const int screenWidth = 800;
             const int screenHeight = 600;
-
+            GameState state = new GameState(); //fire and forget... hopefully.
             Raylib.InitWindow(screenWidth, screenHeight, "Raylib Test");
             Raylib.SetTargetFPS(60);
 
@@ -28,16 +30,24 @@ namespace RaylibTest
                 Radius = 8f,
                 DrawColor = Color.Red
             };
+            Random rand = new Random();
+            Character character = new Character();
+            //for (int i = 0; i < 100; i++)
+            //{
+                
+            //    Vector2 pos = new Vector2(rand.Next(screenWidth), rand.Next(screenHeight));
+            //    GameState.Instance.CreateCharacter(character, 1, new PrimaryStats(1, 1, 1, 1, 1), new JobClass(), pos, 5f);
+            //}
             ResourceState char1HP = new ResourceState() { ResourceType = ResourceType.Health, Current = player.BaseStats.Endurance * 10, Maximum = player.BaseStats.Endurance * 10 };
             ResourceState char1Heat = new ResourceState() { ResourceType = ResourceType.Heat, Current = 0, Maximum = 100 };
             ResourceState char1ComboPoints = new ResourceState() { ResourceType = ResourceType.ComboPoints, Current = 0, Maximum = 5 };
             ResourceState char2HP = new ResourceState() { ResourceType = ResourceType.Health, Current = enemy.BaseStats.Endurance * 10, Maximum = player.BaseStats.Endurance * 10 };
             SortieState char1State = new SortieState() { Resources = new Dictionary<ResourceType, ResourceState>() { { ResourceType.Health, char1HP }, { ResourceType.Heat, char1Heat }, { ResourceType.ComboPoints, char1ComboPoints }, } };
             SortieState char2State = new SortieState() { Resources = new Dictionary<ResourceType, ResourceState>() { { ResourceType.Health, char2HP } } };
-            GameImpurities.ResourceStates.Add(player.Guid, char1State.Resources);
-            GameImpurities.ResourceStates.Add(enemy.Guid, char2State.Resources);
+            Entity playerE = GameState.Instance.CreateCharacter(player.Character, 0, player.BaseStats, new JobClass(), new Vector2(400, 300), 5f, char1State.Resources);
+            Entity enemyE = GameState.Instance.CreateCharacter(enemy.Character, 0, enemy.BaseStats, new JobClass(), new Vector2(550, 300),0f, char2State.Resources);
 
-            RaylibThings.Actor? selectedTarget = null;
+            Entity? selectedTarget = null;
             List<RaylibThings.SpellBlock> spellBlocks = new();
             GameImpurities.InitializeGame();
             while (!Raylib.WindowShouldClose())
@@ -50,9 +60,10 @@ namespace RaylibTest
                 if (Raylib.IsKeyDown(KeyboardKey.S)) player.Y += player.Speed;
                 if (Raylib.IsKeyDown(KeyboardKey.A)) player.X -= player.Speed;
                 if (Raylib.IsKeyDown(KeyboardKey.D)) player.X += player.Speed;
-
-                if (tempX != player.X || tempY != player.Y)
-                    GameImpurities.CharacterMoving(player.Guid);
+                if (Raylib.IsKeyDown(KeyboardKey.R))
+                {
+                    Regenerate();
+                }
                 player.X = Math.Clamp(player.X, 0, screenWidth);
                 player.Y = Math.Clamp(player.Y, 0, screenHeight);
 
@@ -63,7 +74,7 @@ namespace RaylibTest
 
                     if (Raylib.CheckCollisionPointCircle(mousePos, new Vector2(enemy.X, enemy.Y), enemy.Radius))
                     {
-                        selectedTarget = enemy;
+                        selectedTarget = enemyE;
                         Console.WriteLine($"Clicked enemy GUID: {enemy.Guid}");
                     }
                 }
@@ -71,56 +82,22 @@ namespace RaylibTest
                 // Fire spell at red circle with key 1
                 if (Raylib.IsKeyPressed(KeyboardKey.One))
                 {
-                    RaylibThings.SpellBlock? spell = RaylibThings.ShootSpell(player, player.TestSpell1, selectedTarget);
-                    if (spell != null)
-                        spellBlocks.Add(spell);
+                    RaylibThings.ShootSpell(playerE, player.TestSpell1, selectedTarget);
+
                 }
                 if (Raylib.IsKeyPressed(KeyboardKey.Two))
                 {
-                    RaylibThings.SpellBlock? spell = RaylibThings.ShootSpell(player, player.TestSpell2, selectedTarget);
-                    if (spell != null)
-                        spellBlocks.Add(spell);
+                    RaylibThings.ShootSpell(playerE, player.TestSpell2, selectedTarget);
+
                 }
 
-                // Update spell projectiles
-                for (int i = spellBlocks.Count - 1; i >= 0; i--)
-                {
-                    RaylibThings.SpellBlock block = spellBlocks[i];
+                GameState.Instance.Update();
 
-                    block.X += block.DirectionX * block.Speed;
-                    block.Y += block.DirectionY * block.Speed;
-
-                    float dx = enemy.X - block.X;
-                    float dy = enemy.Y - block.Y;
-                    float distanceToEnemy = MathF.Sqrt(dx * dx + dy * dy);
-
-                    if (distanceToEnemy <= enemy.Radius)
-                    {
-                        Console.WriteLine($"Spell hit enemy {enemy.Guid}");
-                        spellBlocks.RemoveAt(i);
-                        continue;
-                    }
-
-                    // Remove if off screen
-                    if (block.X < 0 || block.X > screenWidth || block.Y < 0 || block.Y > screenHeight)
-                    {
-                        spellBlocks.RemoveAt(i);
-                        continue;
-                    }
-
-                    spellBlocks[i] = block;
-                }
-                GameImpurities.EndCycle();
                 Raylib.BeginDrawing();
+                Raylib.ClearBackground(Color.DarkGray);
                 Raylib.ClearBackground(Color.DarkGray);
 
                 Raylib.DrawCircle((int)player.X, (int)player.Y, player.Radius, player.DrawColor);
-                Raylib.DrawText(
-                    $"{GameImpurities.ResourceStates[enemy.Guid][ResourceType.Health].Current}/{GameImpurities.ResourceStates[enemy.Guid][ResourceType.Health].Maximum}",
-                    (int)enemy.X - 25,
-                    (int)enemy.Y - 25,
-                    16,
-                    Color.White);
                 Raylib.DrawCircle((int)enemy.X, (int)enemy.Y, enemy.Radius, enemy.DrawColor);
                 for (int i = 0; i < spellBlocks.Count; i++)
                 {
@@ -128,14 +105,32 @@ namespace RaylibTest
                 }
                 if (selectedTarget != null)
                 {
-                    Raylib.DrawText($"Selected: {selectedTarget.Guid}", 20, 20, 20, Color.White);
+                    Raylib.DrawText($"Selected: {selectedTarget.ToString()}", 20, 20, 20, Color.White);
                 }
+                var drawQuery = new QueryDescription().WithAll<Vector2>();
+                GameState.Instance.GameWorld.Query(in drawQuery, (ref Vector2 pos) => { Raylib.DrawCircleV(pos, 4, Color.Red); });
+
                 Raylib.EndDrawing();                
             }
             Raylib.CloseWindow();
         }
+        public static void Regenerate()
+        {
+            const int screenWidth = 800;
+            const int screenHeight = 600;
+            Random rand = new Random();
+            Character character = new Character();
+            var removeal = new QueryDescription().WithAll<Vector2>();
+            GameState.Instance.GameWorld.Destroy(in removeal);
+            for (int i = 0; i < 100; i++)
+            {
+                
+                Vector2 pos = new Vector2(rand.Next(screenWidth), rand.Next(screenHeight));
+                GameState.Instance.CreateCharacter(character, 1, new PrimaryStats(1, 1, 1, 1, 1), new JobClass(), pos, 5f, new Dictionary<ResourceType, ResourceState>());
+            }
+        }
     }
-
+    
     public static class RaylibThings
     {
         public class Actor
@@ -149,6 +144,7 @@ namespace RaylibTest
             public SpellDefinition TestSpell1 { get; set; }
             public SpellDefinition TestSpell2 {get; set; }
             public float Speed { get; set; } = 0.0f;
+            public Character Character { get; set; }
 
             public const float MAX_SPEED = 100.0f;
             public PrimaryStats BaseStats { get; set; }
@@ -168,51 +164,12 @@ namespace RaylibTest
         }
         
 
-        public static SpellBlock? ShootSpell(Actor source, SpellDefinition spell, Actor? target)
+        public static void ShootSpell(Entity source, SpellDefinition spell, Entity? target)
         {
-            if (target == null)
-                return null;
-            SpellEvent result;
-            SpellCastRequest request = new SpellCastRequest()
-            {
-                SourceId = source.Guid, PrimaryTargetId = target.Guid, SpellId = spell.Id
-            };
-            if (!GameImpurities.CreateTestSpellEvent(request, spell, out result))
-            {
-                Console.WriteLine("Fail. No Target.");
-                return null;
-            }
-            SpellCastResult spellResults = GameImpurities.ResolveSpell(result, result.WeaponView);
-            if (spellResults.FailureReason != SpellFailReason.None)
-            {
-                return null;
-            }
-            float dx = target.X - source.X;
-            float dy = target.Y - source.Y;
-            float length = MathF.Sqrt(dx * dx + dy * dy);
-            if (spellResults.InstantCastResult!.HasValue && spellResults.InstantCastResult.Value.ResourceChanges != null && spellResults.InstantCastResult.Value.ResourceChanges.Count > 0)
-                GameImpurities.RequestResourceChange(spellResults.InstantCastResult!.Value);
-            if (length == 0)
-            {
-                length = 1;
-            }
+            if (target == null) return;
+            SpellCastIntent intent = Spells.CreateIntent(spell, source, target);
 
-            float dirX = dx / length;
-            float dirY = dy / length;
-            Color color = Color.Black;
-            if (spell.Name == "Rapid Cycle")
-                color = Color.Yellow;
-            else
-                color = Color.Green;
-            return new SpellBlock
-            {
-                X = source.X,
-                Y = source.Y,
-                DirectionX = dirX,
-                DirectionY = dirY,
-                Speed = 8f,
-                SpellColor = color
-            };
+            GameState.Instance!.GameWorld.Create(intent);
         }
 
         public class SpellBlock

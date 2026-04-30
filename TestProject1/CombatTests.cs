@@ -111,11 +111,10 @@ namespace TestProject1
             GameImpurities.ResourceStates.Add(character1.Id, char1State.Resources);
             GameImpurities.ResourceStates.Add(character2.Id, char2State.Resources);
             int rng = 42;
-            SpellCastResult result = GameImpurities.ResolveSpell(new SpellEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng }, null
-            );
+            List<ResourceChange> result = SpellMath.ResolveEffects(new SpellEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng });
             int expectedDamage = character1.BaseStats.Strength / 4*-1; // No weapon, so damage is based on strength only
 
-            Assert.AreEqual(expectedDamage, result.InstantCastResult.Value.ResourceChanges.ToList()[0].Amount);
+            Assert.AreEqual(expectedDamage, result[0].Amount);
         }
         [Test]
         public void AutoAttack_Sword_Test()
@@ -135,82 +134,11 @@ namespace TestProject1
             WeaponView? swordView = WeaponView.Create(actualSword);
             GameImpurities.Weapons.Add(character1.Id, swordView!.Value); //literally made above...
             int rng = 42;
-           SpellCastResult result = GameImpurities.ResolveSpell(new SpellEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng },swordView);
+           List<ResourceChange> result = SpellMath.ResolveEffects(new SpellEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng, WeaponView = swordView });
             //GameImpurities.UpdateResources();
 
             int expectedDamage = 5 + (rng % (10 - 5 + 1)) + character1.BaseStats.Strength / 2; // Weapon damage plus strength bonus
-            Assert.AreEqual(expectedDamage*-1, result.InstantCastResult.Value.ResourceChanges.ToList()[0].Amount);
-        }
-        [Test]
-        public void A0_HotPath_Simple_Test()
-        {
-            //GameImpurities.InitializeGame();
-            //GameImpurities.StartCycle();
-            Character character1 = new Character(Guid.NewGuid(), "Test Character 1", new PrimaryStats(10, 10, 10, 10, 10));
-            Character character2 = new Character(Guid.NewGuid(), "Test Character 2", new PrimaryStats(15, 10, 10, 10, 10));
-            GameImpurities.Characters.Add(character1.Id, character1);
-            GameImpurities.Characters.Add(character2.Id, character2);
-            ResourceState char1HP = new ResourceState() { ResourceType = ResourceType.Health, Current = character1.BaseStats.Endurance * 10, Maximum = character1.BaseStats.Endurance * 10 };
-            ResourceState char2HP = new ResourceState() { ResourceType = ResourceType.Health, Current = character2.BaseStats.Endurance * 10, Maximum = character2.BaseStats.Endurance * 10 };
-            SortieState char1State = new SortieState() { Resources = new Dictionary<ResourceType, ResourceState>() { { ResourceType.Health, char1HP } } };
-            SortieState char2State = new SortieState() { Resources = new Dictionary<ResourceType, ResourceState>() { { ResourceType.Health, char2HP } } };
-            GameImpurities.ResourceStates.Add(character1.Id, char1State.Resources);
-            GameImpurities.ResourceStates.Add(character2.Id, char2State.Resources);
-            EquipmentDefinition swordDefinition = new EquipmentDefinition() { ID = 1, BaseName = "Test Sword", Slot = EquipmentSlot.MainHand, AttackMin = 5, AttackMax = 10, CanRollModifiers = false, StatBonuses = new PrimaryStats(0, 0, 0, 0, 0), Category = EquipmentCategory.Weapon };
-            EquipmentInstance actualSword = EquipmentGenerator.GenerateInstance(Guid.NewGuid(), swordDefinition, null);
-            WeaponView? swordView = WeaponView.Create(actualSword);
-            GameImpurities.Weapons.Add(character1.Id, swordView!.Value); //literally made above...
-            int rng = 42;
-            var sw = new Stopwatch();
-            sw.Start();
-            for (int i = 0; i < 1000; i++)
-            {
-                SpellCastResult results = GameImpurities.ResolveSpell(new SpellEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = meleeAttack, RandomSeed = rng }, swordView);
-            }
-            //GameImpurities.EndCycle();
-            sw.Stop();
-            double seconds = (double)sw.ElapsedTicks / Stopwatch.Frequency;
-            double nanosecondsPerCast = (seconds / 1000) * 1_000_000_000;
-            Console.WriteLine($"Spell resolution took {nanosecondsPerCast} ns");
-            sw.Restart();
-            
-        }
-        [Test]
-        public void A1_HotPath_Complex_Test() //do me first.
-        {
-            //GameImpurities.InitializeGame();
-            //GameImpurities.StartCycle();
-            Character character1 = new Character(Guid.NewGuid(), "Test Character 1", new PrimaryStats(10, 10, 10, 10, 10));
-            Character character2 = new Character(Guid.NewGuid(), "Test Character 2", new PrimaryStats(15, 10, 10, 10, 10));
-            GameImpurities.Characters.Add(character1.Id, character1);
-            GameImpurities.Characters.Add(character2.Id, character2);
-            ResourceState char1HP = new ResourceState() { ResourceType = ResourceType.Health, Current = character1.BaseStats.Endurance * 10, Maximum = character1.BaseStats.Endurance * 10 };
-            ResourceState char1Heat = new ResourceState() { ResourceType = ResourceType.Heat, Current = 0, Maximum = 100 };
-            ResourceState char1ComboPoints = new ResourceState() { ResourceType = ResourceType.ComboPoints, Current = 0, Maximum = 5 };
-            ResourceState char2HP = new ResourceState() { ResourceType = ResourceType.Health, Current = character2.BaseStats.Endurance * 10, Maximum = character2.BaseStats.Endurance * 10 };
-            SortieState char1State = new SortieState() { Resources = new Dictionary<ResourceType, ResourceState>() { { ResourceType.Health, char1HP }, { ResourceType.Heat, char1Heat }, { ResourceType.ComboPoints, char1ComboPoints }, } };
-            SortieState char2State = new SortieState() { Resources = new Dictionary<ResourceType, ResourceState>() { { ResourceType.Health, char2HP } } };
-            GameImpurities.ResourceStates.Add(character1.Id, char1State.Resources);
-            GameImpurities.ResourceStates.Add(character2.Id, char2State.Resources);
-            EquipmentDefinition swordDefinition = new EquipmentDefinition() { ID = 1, BaseName = "Test Sword", Slot = EquipmentSlot.MainHand, AttackMin = 5, AttackMax = 10, CanRollModifiers = false, StatBonuses = new PrimaryStats(0, 0, 0, 0, 0), Category = EquipmentCategory.Weapon };
-
-            EquipmentInstance actualSword = EquipmentGenerator.GenerateInstance(Guid.NewGuid(), swordDefinition, null);
-            WeaponView? swordView = WeaponView.Create(actualSword);
-            GameImpurities.Weapons.Add(character1.Id, swordView!.Value); //literally made above...
-
-            int rng = 42;
-            var sw = new Stopwatch();
-            sw.Start();
-            for (int i = 0; i < 1000; i++)
-            {
-                SpellCastResult result = GameImpurities.ResolveSpell(new SpellEvent() { SourceId = character1, PrimaryTargetId = character2, Spell = rapidCycle, RandomSeed = rng }, swordView);
-                //GameImpurities.RequestResourceChange(result.InstantCastResult!.Value);
-            }
-            //GameImpurities.EndCycle();
-            sw.Stop();
-            double seconds = (double)sw.ElapsedTicks / Stopwatch.Frequency;
-            double nanosecondsPerCast = (seconds / 1000) * 1_000_000_000;
-            Console.WriteLine($"Spell resolution took {nanosecondsPerCast} ns");
+            Assert.AreEqual(expectedDamage*-1, result[0].Amount);
         }
 
             [Test]
@@ -235,7 +163,7 @@ namespace TestProject1
             GameImpurities.Weapons.Add(character1.Id, swordView!.Value); //literally made above...
 
             int rng = 42;
-            SpellCastResult result = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1,Spell = rapidCycle, RandomSeed = rng }, swordView);
+            List<ResourceChange> result = SpellMath.ResolveEffects(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1,Spell = rapidCycle, RandomSeed = rng, WeaponView = swordView });
             
             int expectedTechDamage = 8 + (int)(character1.BaseStats.Agility * 0.6);
             int expectedComboPoints = 1;
@@ -244,7 +172,7 @@ namespace TestProject1
             int expectedHealth = (character2.BaseStats.Endurance * 10) - expectedTechDamage - expectedWeaponDamage;
 
             int calculatedHealthLoss = 0;
-            foreach (ResourceChange change in result.InstantCastResult.Value.ResourceChanges)
+            foreach (ResourceChange change in result)
             {
                 if (change.ResourceType == ResourceType.Health)
                 {
@@ -268,13 +196,6 @@ namespace TestProject1
                 }
             }
             Assert.AreEqual(expectedTechDamage + expectedWeaponDamage, calculatedHealthLoss); //damage is negative, so negate it for the assertion
-            Console.WriteLine($"Character 2 health before request: {GameImpurities.ResourceStates[character2.Id][ResourceType.Health].Current}");
-            GameImpurities.RequestResourceChange(result.InstantCastResult.Value);
-            Console.WriteLine($"Character 2 health after request: {GameImpurities.ResourceStates[character2.Id][ResourceType.Health].Current}");
-            GameImpurities.InitializeGame();
-            Console.WriteLine($"Character 2 health before attack: {GameImpurities.ResourceStates[character2.Id][ResourceType.Health].Current}");
-            GameImpurities.EndCycle();
-            Console.WriteLine($"Character 2 health after attack: {GameImpurities.ResourceStates[character2.Id][ResourceType.Health].Current}");
         }
     }
 }

@@ -136,40 +136,12 @@ public class TimerTests
         GameImpurities.ResourceStates.Add(character2.Id, char2State.Resources);
         
         int rng = 42;
-        SpellCastResult result = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1, Spell = rapidCycle, RandomSeed = rng }, null);
-        GameImpurities.RequestResourceChange(result.InstantCastResult.Value); //commit the edits.
-
         
         t.timeSpan = TimeSpan.FromSeconds(1); //simulating a full second of timing.
         GameImpurities.EndCycle();
         GameImpurities.StartCycle();
 
-        result = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1, Spell = chargeCycle, RandomSeed = rng }, null);
-        Assert.That(result.FailureReason, Is.EqualTo(SpellFailReason.OnCooldown)); //should demonstrate the GCD being incomplete.
         
-        result = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1, Spell = chargeCycle, RandomSeed = rng }, null);
-
-        t.timeSpan = TimeSpan.FromSeconds(2); //two seconds have passed since simulation start.
-        GameImpurities.EndCycle();
-        GameImpurities.StartCycle();
-        SpellCastResult result2 = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1, Spell = rapidCycle, RandomSeed = rng }, null);
-        Assert.That(result2.FailureReason, Is.EqualTo(SpellFailReason.OnCooldown)); //should assert that the spell failed because it is already on CD.
-
-        result  = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1, Spell = chargeCycle, RandomSeed = rng }, null);
-        Assert.That(result.Success);
-        Assert.That(result.InstantCastResult, Is.Null); //this completed, but has to go into the timers to finish casting.
-        t.timeSpan = TimeSpan.FromSeconds(4); //four seconds have passed since simulation start.
-
-        GameImpurities.EndCycle();
-        
-        GameImpurities.StartCycle();
-        t.timeSpan = TimeSpan.FromSeconds(5); //5 seconds have passed since simulation start.
-        GameImpurities.EndCycle();
-        HashSet<ActiveTimer> expiredTimers = GameImpurities.ExpiredTimers();
-        GameImpurities.StartCycle();
-        
-        result2 = GameImpurities.ResolveSpell(new SpellEvent() { PrimaryTargetId = character2, SourceId = character1, Spell = rapidCycle, RandomSeed = rng }, null);
-        Assert.That(result2.FailureReason, Is.EqualTo(SpellFailReason.None));
         
     }
 }

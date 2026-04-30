@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Arch" Version="2.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="Data\equipment.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

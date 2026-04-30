@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Arch.Core;
 
 namespace GameCore
 {
@@ -15,6 +16,7 @@ namespace GameCore
         public double MaximumDistance { get; init; }
         public bool RequiresLineOfSight { get; init; }
         public CastType CastType { get; init; }
+        public SpellKind SpellKind { get; init; } //will make some things not possible.
         public bool AdhereToGlobalCooldown { get; init; }
         public TimeSpan? Duration { get; init; }
         public IReadOnlyList<SpellEffectDefinition> Effects { get; init; }
@@ -36,7 +38,6 @@ namespace GameCore
         public PrimaryStats.StatType? ScalingStat { get; init; }
         public double ScalingFactor { get; init; }
         public ResourceType? ResourceType { get; init; }
-        
     }
     public readonly record struct ResourceChange
     {
@@ -61,6 +62,13 @@ namespace GameCore
         Instant,
         Channeled,
         Charged
+    }
+    public enum SpellKind
+    {
+        Single, //requires a single target clicked.
+        AoE, //applies to an area.
+        Self, //applies to self
+        Focus //requires a focused target.
     }
     public enum TargetKind
     {
@@ -110,7 +118,7 @@ namespace GameCore
             Cooldown = TimeSpan.FromSeconds(1.5)
         };
     }
-    
+
     public static class SpellMath
     {
         static SpellMath()
@@ -142,6 +150,39 @@ namespace GameCore
                 return effect.BaseValue;
             }
         }
+
+
+        public static List<ResourceChange> ResolveEffects(SpellEvent request)
+        {
+            List<ResourceChange> changes = new List<ResourceChange>();
+            foreach (SpellEffectDefinition effect in request.Spell.Effects)
+            {
+                switch (effect.EffectKind)
+                {
+                    case EffectKind.WeaponDamage:
+                        int damage = SpellMath.CalculateWeaponDamage(request.WeaponView, request.SourceId.BaseStats.Strength, request.RandomSeed) * -1;
+                        changes.Add(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value.Id, ResourceType = ResourceType.Health, Amount = damage });
+                        break;
+                    case EffectKind.TechDamage:
+                        Character character = request.SourceId;
+                        int techDamage = SpellMath.CalculateScaledValue(effect, character.BaseStats) * -1;
+                        changes.Add(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value.Id, ResourceType = ResourceType.Health, Amount = techDamage });
+                        break;
+                    case EffectKind.AddResource:
+                        Character sourceCharacter = request.SourceId;
+                        int resourceAmount = SpellMath.CalculateScaledValue(effect, sourceCharacter.BaseStats);
+
+                        if (effect.TargetKind != TargetKind.Self)
+                        {
+                            changes.Add(new ResourceChange() { CharacterId = request.PrimaryTargetId.Value.Id, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
+                        }
+                        else
+                            changes.Add(new ResourceChange() { CharacterId = request.SourceId.Id, ResourceType = effect.ResourceType!.Value, Amount = resourceAmount });
+                        break;
+                }
+            }
+            return changes;
+        }
         public static int CalculateWeaponDamage(WeaponView? weapon, int strengthModifier, int rndNumber)
         {
             if (weapon.HasValue)
@@ -152,17 +193,119 @@ namespace GameCore
                 int damage = baseDamage!.Value + strengthModifier / 2; // Placeholder for actual damage calculation logic
                 return damage;
             }
-            
+
             return strengthModifier / 4;
         }
     }
-    #region Spell Lifecycle
-    public readonly record struct SpellCastRequest
+
+    public static class Spells
     {
-        public Guid SourceId { get; init; }
-        public Guid? PrimaryTargetId { get; init; }
+        public static bool SpellRequestCheck(SpellCastIntent intent, SpellLocks locks, GCDLock? gcd)
+        {
+            //determine if this spell can be casted at all. No validating of the effects just yet.
+            if (locks.SpellsOnCooldown.TryGetValue(intent.SpellId, out _) || locks.IsCasting || gcd.HasValue)
+            {
+                return false; //cant cast so don't bother.
+            }
+            
+            if ((intent.Spell.SpellKind == SpellKind.Single | intent.Spell.SpellKind == SpellKind.Focus) && !intent.PrimaryTargetId.HasValue) //both of these kinds need target
+            {
+                return false;
+            }
+            return true;
+        }
+
+        public static bool TargetSpellEffectValidation(SpellEffectDefinition definition, PrimaryStats stats, Dictionary<ResourceType,ResourceState> sourceResource, Dictionary<ResourceType, ResourceState> targetResource)
+        {
+            targetResource.TryGetValue(ResourceType.Health, out ResourceState health);
+
+            switch (definition.EffectKind)
+            {
+                case EffectKind.Heal:
+                    if (health.Current > 0)
+                    {
+                        return true;
+                    }
+                    break;
+                case EffectKind.WeaponDamage:
+                    if (health.Current > 0)
+                    {
+                        return true;
+                    }
+                    break;
+                case EffectKind.TechDamage:
+                    if (health.Current > 0)
+                    {
+                        return true;
+                    }
+                    break;
+                case EffectKind.PsiDamage:
+                    if (health.Current > 0)
+                    {
+                        return true;
+                    }
+                    break;
+            }
+            switch (definition.EffectKind)
+            {
+                case EffectKind.AddResource:
+                    if(!sourceResource.ContainsKey(definition.ResourceType!.Value)) { return false; }
+                    int resourceAmount = sourceResource[definition.ResourceType!.Value].Current + SpellMath.CalculateScaledValue(definition, stats);
+                    if (resourceAmount > sourceResource[definition.ResourceType!.Value].Maximum)
+                        return false;
+                    return true;
+            }
+            return false;
+        }
+
+        public static SpellCastIntent CreateIntent(SpellDefinition request, Entity source, Entity? target)
+        {
+            return new SpellCastIntent()
+            {
+                OwnerId = source,
+                PrimaryTargetId = target,
+                EnqueueGCD = request.AdhereToGlobalCooldown,
+                EnqueueCooldown = request.Cooldown.HasValue ? true : false,
+                EnqueueTimer = request.CastType == CastType.Instant ? false : true,
+                InstantCast = request.CastType == CastType.Instant ? true : false,
+                Spell = request,
+                SpellId = request.Id
+            };
+        }
+    }
+    public readonly record struct SpellLocks
+    {
+        public Dictionary<int, TimeSpan> SpellsOnCooldown { get; init; }
+        public bool IsCasting { get; init; } //for channels or casts.
+        public SpellLocks()
+        {
+            SpellsOnCooldown = new Dictionary<int, TimeSpan>();
+            IsCasting = false;
+        }
+        public SpellLocks(Dictionary<int, TimeSpan> spellsOnCooldown, bool casting)
+        {
+            SpellsOnCooldown = spellsOnCooldown;
+            IsCasting = casting;
+        }
+    }
+
+    public readonly record struct GCDLock
+    {
+        public TimeSpan ExpireAt { get; init; }
+    }
+
+    #region Spell Lifecycle
+    //intent -> event -> spell object entity -> spell object entity event -> result -> end
+    public readonly record struct SpellCastIntent
+    {
+        public Entity OwnerId { get; init; }
+        public Entity? PrimaryTargetId { get; init; }
+        public bool EnqueueGCD { get; init; }
+        public bool EnqueueTimer { get; init; }
+        public bool EnqueueCooldown { get; init; }
+        public bool InstantCast { get; init; }
         public int SpellId { get; init; }
-        public int RandomSeed { get; init; }
+        public SpellDefinition Spell { get; init; }
     }
     public readonly record struct SpellEvent
     {
@@ -171,30 +314,23 @@ namespace GameCore
         public WeaponView? WeaponView { get; init; }
         public SpellDefinition Spell { get; init; }
         public int RandomSeed { get; init; }
+        public TimeSpan CompleteAt { get; init; }
     }
-
-    public readonly record struct CancelSpell //pull things out of GCD and pendingSpellCast
+    public readonly record struct SpellEventEntity
     {
-        public Guid OwnerId { get; init; }
+        public Entity Source { get; init; }
+        public SpellEvent SpellEvent { get; init; }
     }
-    public readonly record struct PendingSpellCast
+    public readonly record struct SpellEffectResult
     {
-        public Guid OwnerId { get; init; }
-        public ActiveTimer timer {get; init; }
-        public SpellEvent? SpellEvent { get; init; }
-        public WeaponView? WeaponView { get; init; }
+        public SpellCastIntent SpellCastIntent { get; init; }
+        public IEnumerable<ResourceChange>? ResourceChanges { get; init; }
     }
-    public readonly record struct SpellCastResult
+    public enum SpellStatus
     {
-        public bool Success { get; init; }
-        public SpellFailReason FailureReason { get; init; }
-        public SpellEffectResult? InstantCastResult { get; init; } //specifically 
-        }
-        public readonly record struct SpellEffectResult
-    {
-        public bool Success { get; init; }
-        public SpellFailReason FailureReason { get; init; }
-        public IReadOnlyList<ResourceChange>? ResourceChanges { get; init; }
+        Success,
+        Casting,
+        Channeling
     }
     public enum SpellFailReason
     {
