@@ -20,6 +20,8 @@ namespace GameCore
         }
     }
 
+    public readonly record struct MovingFlag();
+
     public readonly record struct AiMemorySet
     {
         public AiTargetMemory TargetMemory { get; init; }

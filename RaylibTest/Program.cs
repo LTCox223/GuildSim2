@@ -2,6 +2,8 @@
 using GameCore;
 using System.Numerics;
 using Arch.Core;
+using Arch.Core.Extensions;
+using System.Collections.Generic;
 
 namespace RaylibTest
 {
@@ -31,7 +33,6 @@ namespace RaylibTest
                 DrawColor = Color.Red
             };
             Random rand = new Random();
-            Character character = new Character();
             //for (int i = 0; i < 100; i++)
             //{
                 
@@ -50,6 +51,7 @@ namespace RaylibTest
             Entity? selectedTarget = null;
             List<RaylibThings.SpellBlock> spellBlocks = new();
             GameImpurities.InitializeGame();
+            GameState.Instance.InitializeTime(null);
             while (!Raylib.WindowShouldClose())
             {
                 GameImpurities.StartCycle();
@@ -63,6 +65,16 @@ namespace RaylibTest
                 if (Raylib.IsKeyDown(KeyboardKey.R))
                 {
                     Regenerate();
+                }
+                if (tempY != player.Y || tempX != player.X)
+                {
+                    if (!playerE.Has<MovingFlag>()) 
+                        playerE.Add(playerE,new MovingFlag());
+                }
+                else
+                {
+                    if (playerE.Has<MovingFlag>())
+                        playerE.Remove<MovingFlag>();
                 }
                 player.X = Math.Clamp(player.X, 0, screenWidth);
                 player.Y = Math.Clamp(player.Y, 0, screenHeight);
@@ -90,14 +102,33 @@ namespace RaylibTest
                     RaylibThings.ShootSpell(playerE, player.TestSpell2, selectedTarget);
 
                 }
+                var query = new QueryDescription().WithAll<Dictionary<ResourceType, ResourceState>, Character>();
+                GameState.Instance.GameWorld.Query(in query, (Entity entity, ref Dictionary<ResourceType, ResourceState> newResources, ref Character chara) => {
+                    if (chara == enemyE.Get<Character>())
+                    {
+                        enemyE.Set<Dictionary<ResourceType, ResourceState>>(newResources);
+                    }
+                    else if (chara == playerE.Get<Character>())
+                    {
+                        playerE.Set<Dictionary<ResourceType, ResourceState>>(newResources);
+                        playerE.Set<Vector2> (new Vector2(player.X, player.Y));
+                    }
+                });
 
                 GameState.Instance.Update();
 
                 Raylib.BeginDrawing();
                 Raylib.ClearBackground(Color.DarkGray);
-                Raylib.ClearBackground(Color.DarkGray);
 
                 Raylib.DrawCircle((int)player.X, (int)player.Y, player.Radius, player.DrawColor);
+                Dictionary<ResourceType, ResourceState> enemyResource = enemyE.Get<Dictionary<ResourceType, ResourceState>>();
+                Dictionary<ResourceType, ResourceState> playerResource = playerE.Get<Dictionary<ResourceType, ResourceState>>();
+                string health = $"{enemyResource[ResourceType.Health].Current} / {enemyResource[ResourceType.Health].Maximum}";
+                string playerHealth = $"{playerResource[ResourceType.Health].Current} / {playerResource[ResourceType.Health].Maximum}";
+                string playerHeat = $"{playerResource[ResourceType.Heat].Current} / {playerResource[ResourceType.Heat].Maximum}";
+                Raylib.DrawText(health, 525, 275, 12, Color.White);
+                Raylib.DrawText(playerHealth, (int)player.X-25, (int)player.Y-25, 12, Color.White);
+                Raylib.DrawText(playerHeat, (int)player.X - 25, (int)player.Y + 25, 12, Color.Orange);
                 Raylib.DrawCircle((int)enemy.X, (int)enemy.Y, enemy.Radius, enemy.DrawColor);
                 for (int i = 0; i < spellBlocks.Count; i++)
                 {
@@ -153,11 +184,12 @@ namespace RaylibTest
                 Name = name;
                 X = x;
                 Y = y;
-
+                
                 Guid id = Guid.NewGuid();
                 Guid = id;
                 BaseStats = new PrimaryStats(10, 10, 10, 10, 10);
-                GameImpurities.Characters.Add(id, new Character(id, name, BaseStats));
+                Character = new Character(id, name, BaseStats);
+                //GameImpurities.Characters.Add(id, new Character(id, name, BaseStats));
                 TestSpell1 = rapidCycle;
                 TestSpell2 = chargeCycle;
             }
@@ -216,30 +248,32 @@ namespace RaylibTest
                     TargetKind = TargetKind.Self,
                     EffectKind = EffectKind.AddResource,
                     ResourceType = ResourceType.ComboPoints,
-                    BaseValue = 1
+                    BaseValue = 1,
+                    RequiredForValidation = false
                 },
                 new SpellEffectDefinition
                 {
                     TargetKind = TargetKind.Self,
                     EffectKind = EffectKind.AddResource,
                     ResourceType = ResourceType.Heat,
-                    BaseValue = 20
+                    BaseValue = 20,
+                    RequiredForValidation = true
                 }
             },
             Cooldown = TimeSpan.FromSeconds(5),
         };
 
         private static SpellDefinition chargeCycle = new SpellDefinition()
-    {
-        Id = 101,
-        Name = "Charge Cycle",
-        MinimumDistance = 0,
-        MaximumDistance = 30,
-        RequiresLineOfSight = true,
-        AdhereToGlobalCooldown = true,
-        CastType = CastType.Charged,
-        Duration = TimeSpan.FromSeconds(3), //just to test it. 
-        Effects = new[]
+        {
+            Id = 101,
+            Name = "Charge Cycle",
+            MinimumDistance = 0,
+            MaximumDistance = 30,
+            RequiresLineOfSight = true,
+            AdhereToGlobalCooldown = true,
+            CastType = CastType.Charged,
+            Duration = TimeSpan.FromSeconds(3), //just to test it. 
+            Effects = new[]
 
         {
                 new SpellEffectDefinition
@@ -264,7 +298,8 @@ namespace RaylibTest
             TargetKind = TargetKind.Self,
             EffectKind = EffectKind.AddResource,
             ResourceType = ResourceType.ComboPoints,
-            BaseValue = 1
+            BaseValue = 1,
+            RequiredForValidation = false
         },
         new SpellEffectDefinition
         {
@@ -274,7 +309,7 @@ namespace RaylibTest
             BaseValue = 20
         }
         }
-    };
+        };
 
     }
 }

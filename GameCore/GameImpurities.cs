@@ -160,32 +160,32 @@ namespace GameCore
 
             Dictionary<Guid, Dictionary<ResourceType, ResourceState>> updatedResources = new Dictionary<Guid, Dictionary<ResourceType, ResourceState>>();
 
-            while (resourceChanges.Count > 0)
-            {
-                ResourceChange state = resourceChanges.Dequeue();
-                //updatedResources.TryGetValue(state.CharacterId, out Dictionary<ResourceType, ResourceState>? resourceState);
-                if (!updatedResources.TryGetValue(state.CharacterId, out Dictionary<ResourceType, ResourceState>? resourceState))
-                {
-                    resourceState = previousState[state.CharacterId];
-                }
+            //while (resourceChanges.Count > 0)
+            //{
+            //    ResourceChange state = resourceChanges.Dequeue();
+            //    //updatedResources.TryGetValue(state.CharacterId, out Dictionary<ResourceType, ResourceState>? resourceState);
+            //    if (!updatedResources.TryGetValue(state.CharacterId, out Dictionary<ResourceType, ResourceState>? resourceState))
+            //    {
+            //        resourceState = previousState[state.CharacterId];
+            //    }
 
-                ResourceState oldResourceState = resourceState[state.ResourceType];
-                int newCurrent = oldResourceState.Current + state.Amount;
-                newCurrent = Math.Max(0, Math.Min(oldResourceState.Maximum, newCurrent));
-                ResourceState newResourceState = new ResourceState
-                {
-                    ResourceType = oldResourceState.ResourceType,
-                    Current = newCurrent,
-                    Maximum = oldResourceState.Maximum
-                };
+            //    ResourceState oldResourceState = resourceState[state.ResourceType];
+            //    int newCurrent = oldResourceState.Current + state.Amount;
+            //    newCurrent = Math.Max(0, Math.Min(oldResourceState.Maximum, newCurrent));
+            //    ResourceState newResourceState = new ResourceState
+            //    {
+            //        ResourceType = oldResourceState.ResourceType,
+            //        Current = newCurrent,
+            //        Maximum = oldResourceState.Maximum
+            //    };
 
-                resourceState[state.ResourceType] = newResourceState;
+            //    resourceState[state.ResourceType] = newResourceState;
 
-                Dictionary<ResourceType, ResourceState> newSortieState = resourceState;
+            //    Dictionary<ResourceType, ResourceState> newSortieState = resourceState;
 
-                updatedResources[state.CharacterId] = newSortieState;
-            }
-            changedResources = updatedResources;
+            //    updatedResources[state.CharacterId] = newSortieState;
+            //}
+            //changedResources = updatedResources;
 
 
             return true;
