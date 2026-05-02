@@ -95,23 +95,20 @@ namespace RaylibTest
                 if (Raylib.IsKeyPressed(KeyboardKey.One))
                 {
                     RaylibThings.ShootSpell(playerE, player.TestSpell1, selectedTarget);
-
                 }
                 if (Raylib.IsKeyPressed(KeyboardKey.Two))
                 {
                     RaylibThings.ShootSpell(playerE, player.TestSpell2, selectedTarget);
-
                 }
                 var query = new QueryDescription().WithAll<Dictionary<ResourceType, ResourceState>, Character>();
                 GameState.Instance.GameWorld.Query(in query, (Entity entity, ref Dictionary<ResourceType, ResourceState> newResources, ref Character chara) => {
                     if (chara == enemyE.Get<Character>())
                     {
-                        enemyE.Set<Dictionary<ResourceType, ResourceState>>(newResources);
+                        enemyE = entity;
                     }
                     else if (chara == playerE.Get<Character>())
                     {
-                        playerE.Set<Dictionary<ResourceType, ResourceState>>(newResources);
-                        playerE.Set<Vector2> (new Vector2(player.X, player.Y));
+                        playerE = entity;
                     }
                 });
 

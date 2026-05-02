@@ -51,8 +51,15 @@ namespace GameCore
             });
             query = new QueryDescription().WithAll<SpellCancelFlag>();
             gameWorld.Destroy(query);
-            query = new QueryDescription().WithAll<SpellEventComponent, SpellInstantFlag>();
-            gameWorld.Query(in query, (ref SpellEventComponent spell) => { SpellInstant(ref spell); });
+            query = new QueryDescription().WithAll<SpellEventComponent>();
+            gameWorld.Query(in query, (Entity entity, ref SpellEventComponent spell) => {
+                if(entity.Has<SpellInstantFlag>())
+                {
+                    SpellInstant(ref spell); 
+                }
+                
+                SpellCleanup(ref spell); 
+                });
             gameWorld.Destroy(query);
 
             query = new QueryDescription().WithAll<ResourceChange>();
@@ -72,10 +79,36 @@ namespace GameCore
         }
         public void Update()
         {
-            SpellUpdate();
+
             ResourceUpdate();
+            SpellUpdate();
+            var query = new QueryDescription().WithAll<SpellLocks>();
+            gameWorld.Query(in query, (Entity entity, ref SpellLocks locks) =>
+            {
+                Queue<int> expiredSpells = new Queue<int>();
+                foreach(var kvp in locks.SpellsOnCooldown)
+                {
+                    if(kvp.Value < Instance.CurrentTime)
+                    {
+                        expiredSpells.Enqueue(kvp.Key);
+                    }
+                }
+                foreach (int value in expiredSpells)
+                {
+                    locks.SpellsOnCooldown.Remove(value);
+                }
+            });
+            query = new QueryDescription().WithAny<GCDLock>();
+            gameWorld.Query(in query, (Entity entity, ref GCDLock gcd) =>
+            {
+                if (gcd.ExpireAt < Instance.CurrentTime)
+                {
+                    entity.Remove<GCDLock>();
+                }
+            });
             End();
         }
+
         private void ResourceUpdate()
         {
             TimeSpan check = _currentTime - _lastTime;
@@ -117,12 +150,19 @@ namespace GameCore
             return gameWorld.Create(character, experience, stats, job, location, speed, spellLocks, resources);
         }
 
-        private static void SpellRequests(Entity requestEntity, ref SpellCastIntent intent) //handles the incoming spell requests.
+        private static void SpellRequests(Entity requester, ref SpellCastIntent intent) //handles the incoming spell requests.
         {
             Entity sourceEntity = intent.OwnerId;
             Entity? targetEntity = intent.PrimaryTargetId;
-            sourceEntity.TryGet<GCDLock?>(out GCDLock? gcd);
-            bool check = Spells.SpellRequestCheck(intent, sourceEntity.Get<SpellLocks>(), gcd);
+            bool check = false;
+            if (sourceEntity.TryGet<GCDLock>(out GCDLock gcd))
+            {
+                check = Spells.SpellRequestCheck(intent, sourceEntity.Get<SpellLocks>(), gcd);
+            }
+            else
+            {
+                check = Spells.SpellRequestCheck(intent, sourceEntity.Get<SpellLocks>(), null);
+            }
             if (!check)
             {
                 return;
@@ -179,17 +219,27 @@ namespace GameCore
                 }
             }
         }
+
         public readonly record struct AffectedEntity
         {
             public Entity Affected { get; init; }
         }
         private static void SpellCasting(ref SpellEventComponent spell)
         {
-
+            
         }
-        private static void SpellCleanup(Entity spell)
+        private static void SpellCleanup(ref SpellEventComponent spell)
         {
-
+            SpellEvent spellEvent = spell.SpellEvent;
+            spell.Source.Add<GCDLock>(new GCDLock(){ ExpireAt = Instance.CurrentTime + TimeSpan.FromSeconds(1.5)});
+            if (spellEvent.Spell.Cooldown != null && spellEvent.Spell.Cooldown != TimeSpan.FromSeconds(0))
+            {
+                SpellLocks locks = spell.Source.Get<SpellLocks>();
+                if (!locks.SpellsOnCooldown.ContainsKey(spellEvent.Spell.Id))
+                {
+                    //locks.SpellsOnCooldown.Add(spellEvent.Spell.Id, Instance.CurrentTime + spellEvent.Spell.Cooldown.Value);
+                }
+            }
         }
         public class SimulationTick : ISimulationTimeAdvance
         {
