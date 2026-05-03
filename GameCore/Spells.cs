@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using Arch.Core;
@@ -201,10 +202,10 @@ namespace GameCore
 
     public static class Spells
     {
-        public static bool SpellRequestCheck(SpellCastIntent intent, SpellLocks locks, GCDLock? gcd)
+        public static bool SpellRequestCheck(SpellCastIntent intent, SpellLocks locks, GCDLock? gcd, SpellCastingFlag? castFlag)
         {
             //determine if this spell can be casted at all. No validating of the effects just yet.
-            if (locks.SpellsOnCooldown.TryGetValue(intent.SpellId, out _) || locks.IsCasting || gcd.HasValue)
+            if (locks.SpellsOnCooldown.TryGetValue(intent.SpellId, out _) || castFlag.HasValue || gcd.HasValue)
             {
                 return false; //cant cast so don't bother.
             }
@@ -294,6 +295,7 @@ namespace GameCore
 
 
     #endregion
+    
     #region SpellEntities
 
     #endregion
@@ -314,10 +316,9 @@ namespace GameCore
         public TimeSpan NextTickAt { get; init; }
         public TimeSpan ExpireAt { get; init; }
     }
-
     public readonly record struct SpellInstantFlag();
-    public readonly record struct SpellFinishedFlag();
     public readonly record struct SpellCancelFlag();
+    public readonly record struct SpellCastingFlag();
     public readonly record struct SpellEventComponent
     {
         public Entity Source { get; init; }
@@ -327,16 +328,13 @@ namespace GameCore
     public readonly record struct SpellLocks
     {
         public Dictionary<int, TimeSpan> SpellsOnCooldown { get; init; }
-        public bool IsCasting { get; init; } //for channels or casts.
         public SpellLocks()
         {
             SpellsOnCooldown = new Dictionary<int, TimeSpan>();
-            IsCasting = false;
         }
         public SpellLocks(Dictionary<int, TimeSpan> spellsOnCooldown, bool casting)
         {
             SpellsOnCooldown = spellsOnCooldown;
-            IsCasting = casting;
         }
     }
 

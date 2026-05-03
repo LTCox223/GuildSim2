@@ -47,6 +47,10 @@ namespace GameCore
                 if (spellSource.Has<MovingFlag>())
                 {
                     source.Add(new SpellCancelFlag());
+                    if (component.Source.Has<SpellCastingFlag>())
+                    {
+                        component.Source.Remove<SpellCastingFlag>();
+                    }
                 }
             });
             query = new QueryDescription().WithAll<SpellCancelFlag>();
@@ -57,11 +61,14 @@ namespace GameCore
                 {
                     SpellInstant(ref spell); 
                 }
-                
-                SpellCleanup(ref spell); 
+                else if (entity.Has<SpellCastComponent>())
+                {
+                    SpellCasting(entity, ref spell, entity.Get<SpellCastComponent>());
+                }
                 });
+            query = new QueryDescription().WithAll<DestroyFlag, SpellEventComponent>();
+            gameWorld.Query(in query, (ref SpellEventComponent spell) => {SpellCleanup(ref spell);});
             gameWorld.Destroy(query);
-
             query = new QueryDescription().WithAll<ResourceChange>();
             gameWorld.Query(in query, (Entity source, ref ResourceChange change) => {
                 AffectedEntity affected = source.Get<AffectedEntity>();
@@ -69,17 +76,16 @@ namespace GameCore
                 Dictionary<ResourceType,ResourceState> keyValuePairs = entity.Get<Dictionary<ResourceType,ResourceState>>();
                 ResourceState state = keyValuePairs[change.ResourceType];
                 int newState = state.Current + change.Amount;
+                newState = Math.Clamp(newState,0,state.Maximum);
                 ResourceState newResource = new ResourceState() { Current = newState, ResourceType = state.ResourceType, Maximum = state.Maximum };
                 keyValuePairs[change.ResourceType] = newResource;
                 entity.Set<Dictionary<ResourceType,ResourceState>>(keyValuePairs);
             }
             );
             gameWorld.Destroy(query);
-            
         }
         public void Update()
         {
-
             ResourceUpdate();
             SpellUpdate();
             var query = new QueryDescription().WithAll<SpellLocks>();
@@ -101,7 +107,7 @@ namespace GameCore
             query = new QueryDescription().WithAny<GCDLock>();
             gameWorld.Query(in query, (Entity entity, ref GCDLock gcd) =>
             {
-                if (gcd.ExpireAt < Instance.CurrentTime)
+                if (gcd.ExpireAt <= Instance.CurrentTime)
                 {
                     entity.Remove<GCDLock>();
                 }
@@ -154,15 +160,18 @@ namespace GameCore
         {
             Entity sourceEntity = intent.OwnerId;
             Entity? targetEntity = intent.PrimaryTargetId;
-            bool check = false;
+            
+            GCDLock? lockCheck = null;
+            SpellCastingFlag? castFlag = null;
             if (sourceEntity.TryGet<GCDLock>(out GCDLock gcd))
             {
-                check = Spells.SpellRequestCheck(intent, sourceEntity.Get<SpellLocks>(), gcd);
+                lockCheck = gcd;
             }
-            else
+            if (sourceEntity.TryGet<SpellCastingFlag>(out SpellCastingFlag flag))
             {
-                check = Spells.SpellRequestCheck(intent, sourceEntity.Get<SpellLocks>(), null);
+                castFlag = flag;
             }
+            bool check = Spells.SpellRequestCheck(intent, sourceEntity.Get<SpellLocks>(),lockCheck,castFlag);
             if (!check)
             {
                 return;
@@ -187,13 +196,14 @@ namespace GameCore
                 switch (intent.Spell.CastType)
                 {
                     case CastType.Instant:
-                        GameState.Instance.GameWorld.Create(spellEntity, new SpellInstantFlag());
+                        GameState.Instance.GameWorld.Create(spellEntity, new SpellInstantFlag(), new DestroyFlag());
                         break;
                     case CastType.Channeled:
                         GameState.Instance.GameWorld.Create(spellEntity, new SpellInstantFlag());
                         break;
                     case CastType.Charged:
                         GameState.Instance.GameWorld.Create(spellEntity, new SpellCastComponent() { ExpireAt = GameState.Instance.CurrentTime + spellEvent.Spell.Duration!.Value});
+                        sourceEntity.Add(new SpellCastingFlag());
                         break;
                 }
             }
@@ -224,9 +234,13 @@ namespace GameCore
         {
             public Entity Affected { get; init; }
         }
-        private static void SpellCasting(ref SpellEventComponent spell)
+        private static void SpellCasting(Entity entity, ref SpellEventComponent spell, SpellCastComponent cast)
         {
-            
+            if (cast.ExpireAt <= Instance.CurrentTime)
+            {
+                SpellInstant(ref spell);
+                entity.Add(new DestroyFlag());
+            }
         }
         private static void SpellCleanup(ref SpellEventComponent spell)
         {
@@ -237,8 +251,12 @@ namespace GameCore
                 SpellLocks locks = spell.Source.Get<SpellLocks>();
                 if (!locks.SpellsOnCooldown.ContainsKey(spellEvent.Spell.Id))
                 {
-                    //locks.SpellsOnCooldown.Add(spellEvent.Spell.Id, Instance.CurrentTime + spellEvent.Spell.Cooldown.Value);
+                    locks.SpellsOnCooldown.Add(spellEvent.Spell.Id, Instance.CurrentTime + spellEvent.Spell.Cooldown.Value);
                 }
+            }
+            if (spell.Source.Has<SpellCastingFlag>())
+            {
+                spell.Source.Remove<SpellCastingFlag>();
             }
         }
         public class SimulationTick : ISimulationTimeAdvance
@@ -265,5 +283,6 @@ namespace GameCore
     }
 
     #region Component Library
+    public readonly record struct DestroyFlag();
     #endregion
 }

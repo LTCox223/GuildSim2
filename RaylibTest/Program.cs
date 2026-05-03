@@ -4,6 +4,7 @@ using System.Numerics;
 using Arch.Core;
 using Arch.Core.Extensions;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 
 namespace RaylibTest
 {
@@ -12,6 +13,7 @@ namespace RaylibTest
 
         static void Main(string[] args)
         {
+            System.Drawing.ColorConverter colorConverter = new System.Drawing.ColorConverter();
             const int screenWidth = 800;
             const int screenHeight = 600;
             GameState state = new GameState(); //fire and forget... hopefully.
@@ -100,43 +102,33 @@ namespace RaylibTest
                 {
                     RaylibThings.ShootSpell(playerE, player.TestSpell2, selectedTarget);
                 }
+                
+                GameState.Instance.Update();
+                Raylib.BeginDrawing();
+                Raylib.ClearBackground(Color.DarkGray);
                 var query = new QueryDescription().WithAll<Dictionary<ResourceType, ResourceState>, Character>();
                 GameState.Instance.GameWorld.Query(in query, (Entity entity, ref Dictionary<ResourceType, ResourceState> newResources, ref Character chara) => {
+                    Dictionary<ResourceType, ResourceState> resource = entity.Get<Dictionary<ResourceType, ResourceState>>();
                     if (chara == enemyE.Get<Character>())
                     {
-                        enemyE = entity;
+                        string health = $"{resource[ResourceType.Health].Current} / {resource[ResourceType.Health].Maximum}";
+                        Raylib.DrawCircle((int)enemy.X, (int)enemy.Y, enemy.Radius, enemy.DrawColor);
+                        Raylib.DrawText(health, 525, 275, 12, Color.White);
                     }
                     else if (chara == playerE.Get<Character>())
                     {
+                        string playerHealth = $"{resource[ResourceType.Health].Current} / {resource[ResourceType.Health].Maximum}";
+                        string playerHeat = $"{resource[ResourceType.Heat].Current} / {resource[ResourceType.Heat].Maximum}";
                         playerE = entity;
+                        Raylib.DrawText(playerHealth, (int)player.X-25, (int)player.Y-25, 12, Color.White);
+                        Raylib.DrawText(playerHeat, (int)player.X - 25, (int)player.Y + 25, 12, Color.Orange);
+                        Raylib.DrawCircle((int)player.X, (int)player.Y, player.Radius, player.DrawColor);
+                        if (entity.Has<SpellCastingFlag>())
+                        {
+                            Raylib.DrawText("Player is Casting", 0, screenHeight-25,12,Color.White);
+                        }
                     }
                 });
-
-                GameState.Instance.Update();
-
-                Raylib.BeginDrawing();
-                Raylib.ClearBackground(Color.DarkGray);
-
-                Raylib.DrawCircle((int)player.X, (int)player.Y, player.Radius, player.DrawColor);
-                Dictionary<ResourceType, ResourceState> enemyResource = enemyE.Get<Dictionary<ResourceType, ResourceState>>();
-                Dictionary<ResourceType, ResourceState> playerResource = playerE.Get<Dictionary<ResourceType, ResourceState>>();
-                string health = $"{enemyResource[ResourceType.Health].Current} / {enemyResource[ResourceType.Health].Maximum}";
-                string playerHealth = $"{playerResource[ResourceType.Health].Current} / {playerResource[ResourceType.Health].Maximum}";
-                string playerHeat = $"{playerResource[ResourceType.Heat].Current} / {playerResource[ResourceType.Heat].Maximum}";
-                Raylib.DrawText(health, 525, 275, 12, Color.White);
-                Raylib.DrawText(playerHealth, (int)player.X-25, (int)player.Y-25, 12, Color.White);
-                Raylib.DrawText(playerHeat, (int)player.X - 25, (int)player.Y + 25, 12, Color.Orange);
-                Raylib.DrawCircle((int)enemy.X, (int)enemy.Y, enemy.Radius, enemy.DrawColor);
-                for (int i = 0; i < spellBlocks.Count; i++)
-                {
-                    Raylib.DrawCircle((int)spellBlocks[i].X, (int)spellBlocks[i].Y, 4f, spellBlocks[i].SpellColor);
-                }
-                if (selectedTarget != null)
-                {
-                    Raylib.DrawText($"Selected: {selectedTarget.ToString()}", 20, 20, 20, Color.White);
-                }
-                var drawQuery = new QueryDescription().WithAll<Vector2>();
-                GameState.Instance.GameWorld.Query(in drawQuery, (ref Vector2 pos) => { Raylib.DrawCircleV(pos, 4, Color.Red); });
 
                 Raylib.EndDrawing();                
             }
@@ -257,7 +249,7 @@ namespace RaylibTest
                     RequiredForValidation = true
                 }
             },
-            Cooldown = TimeSpan.FromSeconds(5),
+            Cooldown = TimeSpan.FromSeconds(2),
         };
 
         private static SpellDefinition chargeCycle = new SpellDefinition()
